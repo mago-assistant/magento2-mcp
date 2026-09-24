@@ -57,6 +57,11 @@ Every enabled tool adds a line to the skill's description on every request to th
 not that tool is used. Enabling a large server measurably grows the token cost of every conversation
 turn — enable only the servers and tools you actually want the assistant reaching for.
 
+While a call runs, the chat panel reads like one of Mago's own skills: the tag shows the full path
+`mcp:bricklayer:order-get` (skill, server, tool), and the status line a plain phrase built from the
+tool name, `Getting order...`. A plugin on Mago's streaming entry points relabels the addon's own
+events; Mago's code is untouched. Reloaded conversations show the stored `mcp` name.
+
 ## Read, write, disabled
 
 Each tool is classified `read`, `write`, or `disabled`. The default classification comes from the
@@ -224,6 +229,15 @@ its own logs even in debug mode.
   who can call one enabled server's read tools can call every enabled server's read tools.
 - **Protocol versions 2024-11-05 through 2025-06-18** are negotiated; a server that only speaks an
   older or newer version is rejected during the handshake.
+- **The chat panel relabeling depends on Mago internals.** `ChatService` is not `@api`, so the plugin
+  reads its `tool_call`/`tool_status` event shapes (`name`/`input`, `name`/`status`/`message`) without
+  a contract. If Mago changes those shapes, the events simply pass through unrelabeled and the panel
+  goes back to showing `mcp`; nothing breaks.
+- **Several MCP calls in one turn: status lines stay generic.** The tool tags are always exact (each
+  `tool_call` event carries its own input), but Mago emits no status for a call it denied or one the
+  admin left unticked on the confirmation card, so when more than one MCP call is in flight there is no
+  reliable way to tell which running/done/failed status belongs to which call. Rather than guess, the
+  status line keeps the generic `mcp` name and Mago's own message in that case.
 
 ## Environment variables
 

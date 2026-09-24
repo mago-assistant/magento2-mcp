@@ -29,6 +29,11 @@
         </arguments>
     </type>
 
+    <!-- Chat panel labels: show "server: tool" instead of "mcp" for this addon's own tool events -->
+    <type name="MagoAssistant\Mago\Service\Ai\ChatService">
+        <plugin name="mago_mcp_tool_display" type="MagoAssistant\Mcp\Plugin\ChatServiceToolDisplay"/>
+    </type>
+
     <type name="Magento\Framework\Console\CommandListInterface">
         <arguments>
             <argument name="commands" xsi:type="array">
