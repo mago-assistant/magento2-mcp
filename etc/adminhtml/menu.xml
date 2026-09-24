@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <add id="MagoAssistant_Mcp::servers" title="MCP Servers" module="MagoAssistant_Mcp"
+             parent="MagoAssistant_Mago::assistant_menu" action="mago_mcp/servers/index"
+             resource="MagoAssistant_Mcp::manage" sortOrder="25"/>
+    </menu>
+</config>

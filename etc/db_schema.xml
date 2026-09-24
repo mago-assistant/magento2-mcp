@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="mago_mcp_server" resource="default" engine="innodb" comment="Mago MCP servers">
+        <column xsi:type="int" name="server_id" unsigned="true" nullable="false" identity="true" comment="Server ID"/>
+        <column xsi:type="varchar" name="name" nullable="false" length="64" comment="Unique server name"/>
+        <column xsi:type="text" name="command" nullable="false" comment="JSON array: executable and arguments"/>
+        <column xsi:type="text" name="env" nullable="true" comment="JSON object of environment variables"/>
+        <column xsi:type="varchar" name="cwd" nullable="true" length="255" comment="Working directory"/>
+        <column xsi:type="varchar" name="source" nullable="false" length="16" default="manual" comment="composer, mcp_json or manual"/>
+        <column xsi:type="smallint" name="enabled" unsigned="true" nullable="false" identity="false" default="0" comment="Exposed to the assistant"/>
+        <column xsi:type="smallint" name="missing" unsigned="true" nullable="false" identity="false" default="0" comment="Last scan did not find it"/>
+        <column xsi:type="text" name="tool_overrides" nullable="true" comment="JSON object: tool name to read|write|disabled"/>
+        <column xsi:type="text" name="last_error" nullable="true" comment="Last tools/list failure"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="server_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="MAGO_MCP_SERVER_NAME">
+            <column name="name"/>
+        </constraint>
+    </table>
+</schema>

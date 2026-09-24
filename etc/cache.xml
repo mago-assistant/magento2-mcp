@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Cache/etc/cache.xsd">
+    <type name="mago_mcp" translate="label,description" instance="MagoAssistant\Mcp\Model\Cache\Type\McpTools">
+        <label>Mago MCP tool lists</label>
+        <description>Tool lists fetched from MCP servers for the Mago assistant</description>
+    </type>
+</config>

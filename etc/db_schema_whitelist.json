@@ -1,0 +1,22 @@
+{
+    "mago_mcp_server": {
+        "column": {
+            "server_id": true,
+            "name": true,
+            "command": true,
+            "env": true,
+            "cwd": true,
+            "source": true,
+            "enabled": true,
+            "missing": true,
+            "tool_overrides": true,
+            "last_error": true,
+            "created_at": true,
+            "updated_at": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "MAGO_MCP_SERVER_NAME": true
+        }
+    }
+}

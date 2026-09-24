@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="mago">
+            <group id="mcp" translate="label" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>MCP Servers</label>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Enabled</label>
+                    <comment>Expose enabled MCP servers to the assistant as the "mcp" skill.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="scan_mcp_json" translate="label comment" type="select" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Also discover from .mcp.json</label>
+                    <comment>Read the Claude Code / Cursor .mcp.json in the Magento root in addition to Composer packages.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="process_timeout" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Process timeout (seconds)</label>
+                    <comment>How long one tool call may take before the server process is killed.</comment>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                </field>
+                <field id="cache_lifetime" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Tool list cache lifetime (seconds)</label>
+                    <comment>Tool lists are cached in the "mago_mcp" cache type.</comment>
+                    <validate>validate-digits</validate>
+                </field>
+                <field id="max_result_chars" translate="label comment" type="text" sortOrder="50" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Maximum result characters</label>
+                    <comment>Longer tool results are truncated before they reach the model (about 4 characters per token).</comment>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

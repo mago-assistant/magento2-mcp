@@ -1,0 +1,78 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <preference for="MagoAssistant\Mcp\Api\ServerRepositoryInterface" type="MagoAssistant\Mcp\Model\Server\Repository"/>
+    <preference for="MagoAssistant\Mcp\Api\McpClientInterface" type="MagoAssistant\Mcp\Service\Mcp\StdioClient"/>
+
+    <type name="MagoAssistant\Mcp\Service\Discovery\ServerScanner">
+        <arguments>
+            <argument name="composerSource" xsi:type="object">MagoAssistant\Mcp\Service\Discovery\ComposerSource</argument>
+            <argument name="mcpJsonSource" xsi:type="object">MagoAssistant\Mcp\Service\Discovery\McpJsonSource</argument>
+        </arguments>
+    </type>
+
+    <type name="MagoAssistant\Mcp\Service\Catalog\ToolCatalog">
+        <arguments>
+            <argument name="cache" xsi:type="object">MagoAssistant\Mcp\Model\Cache\Type\McpTools</argument>
+        </arguments>
+    </type>
+
+    <!--
+        The whole registration with Mago, exactly as its VIES example addon does it: one item appended
+        to the assistant's tool registry. Nothing inside MagoAssistant_Mago is edited.
+    -->
+    <type name="MagoAssistant\Mago\Service\Tool\ToolRegistry">
+        <arguments>
+            <argument name="tools" xsi:type="array">
+                <item name="mcp" xsi:type="object">MagoAssistant\Mcp\Service\Tool\McpTool</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <type name="Magento\Framework\Console\CommandListInterface">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="mago_mcp_discover" xsi:type="object">MagoAssistant\Mcp\Console\Command\DiscoverServers</item>
+                <item name="mago_mcp_list" xsi:type="object">MagoAssistant\Mcp\Console\Command\ListServers</item>
+                <item name="mago_mcp_refresh" xsi:type="object">MagoAssistant\Mcp\Console\Command\RefreshTools</item>
+                <item name="mago_mcp_enable" xsi:type="object">MagoAssistant\Mcp\Console\Command\EnableServer</item>
+                <item name="mago_mcp_disable" xsi:type="object">MagoAssistant\Mcp\Console\Command\DisableServer</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!--
+        Shipped server profiles. Keyed by the normalised server name discovery produces. A module that
+        ships its own MCP server adds a profile for it in its own di.xml with the same three arguments.
+    -->
+    <type name="MagoAssistant\Mcp\Service\Catalog\DefaultOverrides">
+        <arguments>
+            <argument name="disabledTools" xsi:type="array">
+                <item name="bricklayer" xsi:type="array">
+                    <item name="code-runner" xsi:type="string">code-runner</item>
+                    <item name="code-runner-help" xsi:type="string">code-runner-help</item>
+                    <item name="batch-execute" xsi:type="string">batch-execute</item>
+                    <item name="reinitialize" xsi:type="string">reinitialize</item>
+                    <item name="generate-module" xsi:type="string">generate-module</item>
+                    <item name="generate-model" xsi:type="string">generate-model</item>
+                    <item name="generate-controller" xsi:type="string">generate-controller</item>
+                    <item name="generate-api" xsi:type="string">generate-api</item>
+                </item>
+            </argument>
+            <argument name="readTools" xsi:type="array">
+                <item name="bricklayer" xsi:type="array">
+                    <item name="database-query" xsi:type="string">database-query</item>
+                </item>
+            </argument>
+            <argument name="personalDataPrefixes" xsi:type="array">
+                <item name="bricklayer" xsi:type="array">
+                    <item name="customer" xsi:type="string">customer-</item>
+                    <item name="order" xsi:type="string">order-</item>
+                    <item name="invoice" xsi:type="string">invoice-</item>
+                    <item name="shipment" xsi:type="string">shipment-</item>
+                    <item name="creditmemo" xsi:type="string">creditmemo-</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+</config>
