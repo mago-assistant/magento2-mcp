@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
     <default>
-        <mago>
-            <mcp>
+        <mago_mcp>
+            <custom>
                 <enabled>0</enabled>
                 <timeout>20</timeout>
                 <output_public>0</output_public>
-            </mcp>
-        </mago>
+            </custom>
+        </mago_mcp>
     </default>
 </config>

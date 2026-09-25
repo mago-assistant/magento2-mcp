@@ -14,7 +14,9 @@ bin/magento setup:upgrade
 
 ## Configuration
 
-**Stores > Configuration > Mago Assistant > General > MCP Server**
+**Stores > Configuration > Mago Assistant > MCP Servers > MCP Server**
+
+Access to this page is the ACL resource *Stores > Configuration > Mago Assistant MCP Servers*.
 
 | Field | |
 |---|---|
@@ -44,7 +46,7 @@ bin/magento mago:mcp:tools --refresh
 
 ## More servers
 
-The admin-configured server is `ConfiguredServer` with code `custom` and config path `mago/mcp`. Add another one as a
+The admin-configured server is `ConfiguredServer` with code `custom` and config path `mago_mcp/custom`. Add another one as a
 virtualType plus a system.xml group with the same field ids:
 
 ```xml

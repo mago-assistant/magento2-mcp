@@ -1,9 +1,11 @@
 <?xml version="1.0"?>
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
     <system>
-        <!-- Adds a group to Mago's own config section -->
-        <section id="mago">
-            <group id="mcp" translate="label comment" type="text" sortOrder="37" showInDefault="1" showInWebsite="0" showInStore="0">
+        <section id="mago_mcp" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+            <label>MCP Servers</label>
+            <tab>mago_assistant</tab>
+            <resource>MagoAssistant_Mcp::config</resource>
+            <group id="custom" translate="label comment" type="text" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>MCP Server</label>
                 <comment><![CDATA[Let the assistant use the tools of a remote MCP server (Streamable HTTP). Run <code>bin/magento mago:mcp:tools --refresh</code> to check the connection. Each remote tool appears on the Skills page as <code>mcp_custom__&lt;tool&gt;</code>.]]></comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">

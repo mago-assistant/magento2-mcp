@@ -32,7 +32,7 @@ class ConfiguredServer implements ServerInterface
         private readonly ScopeConfigInterface $scopeConfig,
         private readonly EncryptorInterface $encryptor,
         private readonly string $code = 'custom',
-        private readonly string $configPath = 'mago/mcp',
+        private readonly string $configPath = 'mago_mcp/custom',
         private readonly array $errorHints = []
     ) {
     }
