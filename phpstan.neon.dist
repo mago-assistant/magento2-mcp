@@ -1,0 +1,18 @@
+parameters:
+    level: 8
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false
+    paths:
+        - .
+    excludePaths:
+        - Test/*
+    ignoreErrors:
+        - '#^Call to an undefined method .*Interface::.*\(\)\.$#'
+        - '#^Call to an undefined method Magento\\Framework\\View\\Result\\Page::setActiveMenu\(\)\.$#'
+        - '#^Call to an undefined method Magento\\Framework\\Data\\Form\\Element\\AbstractElement::unsScope\(\)\.$#'
+        - '#^Call to an undefined method Magento\\Framework\\Data\\Collection\\AbstractDb::addAttributeToFilter\(\)\.$#'
+        # ActionFlag::set() documents $value as string, but Magento core passes a bool here too
+        -
+            message: '#^Parameter \#3 \$value of method Magento\\Framework\\App\\ActionFlag::set\(\) expects string, true given\.$#'
+            path: Controller/Adminhtml/Chat/FormKeyJsonValidation.php
+        - identifier: missingType.iterableValue

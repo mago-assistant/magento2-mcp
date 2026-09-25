@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <!-- Adds a group to Mago's own config section -->
+        <section id="mago">
+            <group id="mcp" translate="label comment" type="text" sortOrder="37" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>MCP Server</label>
+                <comment><![CDATA[Let the assistant use the tools of a remote MCP server (Streamable HTTP). Run <code>bin/magento mago:mcp:tools --refresh</code> to check the connection. The tools appear on the Skills page as <code>mcp_custom</code>.]]></comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="label" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Name</label>
+                    <comment><![CDATA[Shown to the AI as the source of these tools.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="url" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Server URL</label>
+                    <validate>validate-url</validate>
+                    <comment><![CDATA[The MCP endpoint, e.g. <code>https://example.com/mcp</code>.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="token" translate="label comment" type="obscure" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Bearer Token</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment><![CDATA[Sent as <code>Authorization: Bearer</code> for every admin user. Leave empty for a server without authentication.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="allowed_tools" translate="label comment" type="text" sortOrder="50" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Allowed Tools</label>
+                    <comment><![CDATA[Comma-separated tool names. Empty allows every tool the server offers; fewer tools means fewer tokens per message.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="output_public" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Output Contains No Personal Data</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[Only set to Yes when the server never returns personal data: its output then goes to the AI provider as-is. With No, the privacy filter strips every field and the tools return nothing useful.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="timeout" translate="label comment" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Timeout (seconds)</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>
