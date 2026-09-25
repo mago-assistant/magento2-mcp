@@ -43,4 +43,12 @@ interface ServerRepositoryInterface
      * @return array{inserted:int, updated:int, missing:int}
      */
     public function merge(array $discovered): array;
+
+    /**
+     * Rename rows stored under a name an earlier version normalised differently to today's form, keeping
+     * one row per name (see NameMigration). Runs on every setup:upgrade.
+     *
+     * @return array{renamed:int, deleted:int}
+     */
+    public function migrateLegacyNames(): array;
 }

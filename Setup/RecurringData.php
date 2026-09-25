@@ -16,8 +16,9 @@ use MagoAssistant\Mcp\Model\Cache\Type\McpTools;
 use MagoAssistant\Mcp\Service\Discovery\ServerScanner;
 
 /**
- * Runs after every setup:upgrade: enables the module's cache type (Magento ships new types disabled)
- * and rescans so newly installed MCP packages show up in the grid, disabled.
+ * Runs after every setup:upgrade: enables the module's cache type (Magento ships new types disabled),
+ * renames rows an earlier version stored under a differently normalised name, and rescans so newly
+ * installed MCP packages show up in the grid, disabled.
  */
 class RecurringData implements InstallDataInterface
 {
@@ -38,6 +39,11 @@ class RecurringData implements InstallDataInterface
             }
         } catch (\Throwable $e) {
             $this->errorLogger->addLog('MCP cache type enable during setup:upgrade', $e->getMessage());
+        }
+        try {
+            $this->servers->migrateLegacyNames();
+        } catch (\Throwable $e) {
+            $this->errorLogger->addLog('MCP server name migration during setup:upgrade', $e->getMessage());
         }
         try {
             $this->servers->merge($this->scanner->scan());

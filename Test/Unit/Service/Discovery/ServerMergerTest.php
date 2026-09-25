@@ -38,6 +38,25 @@ final class ServerMergerTest extends TestCase
     }
 
     #[Test]
+    public function aHyphenatedDiscoveryMeetsItsUnderscoreRowAsAnUpdate(): void
+    {
+        $existing = ['my_server' => $this->row('my_server', DiscoveredServer::SOURCE_MCP_JSON)];
+        $again = new DiscoveredServer(
+            DiscoveredServer::normaliseName('my-server'),
+            ['node', 'x.js'],
+            [],
+            null,
+            DiscoveredServer::SOURCE_MCP_JSON
+        );
+
+        $plan = (new ServerMerger())->plan($existing, [$again]);
+
+        self::assertSame([], $plan['insert'], 'the hyphen form is the same server, not a new row');
+        self::assertSame([$again], $plan['update']);
+        self::assertSame([], $plan['missing']);
+    }
+
+    #[Test]
     public function aVanishedManualRowIsNeverFlaggedMissing(): void
     {
         $existing = ['mine' => $this->row('mine', DiscoveredServer::SOURCE_MANUAL)];

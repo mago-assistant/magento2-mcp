@@ -184,14 +184,26 @@ final class ToolCatalogTest extends TestCase
     #[Test]
     public function cacheIdsAreSafeForMagentoCache(): void
     {
-        $this->servers->add('magento-demo', true);
-        $this->transport->tools['magento-demo'] = $this->transport->tools['demo'];
+        $this->servers->add('demo_2', true);
+        $this->transport->tools['demo_2'] = $this->transport->tools['demo'];
 
         $catalog = $this->catalog();
         $catalog->entries();
-        $catalog->refresh('magento-demo');
+        $catalog->refresh('demo_2');
 
         self::assertSame(1, $this->cache->saves, 'FakeCache would have thrown on an invalid id');
+    }
+
+    #[Test]
+    public function aServerIsFoundByItsHyphenOrUnderscoreName(): void
+    {
+        $this->servers->add('my-server', true);
+        $this->transport->tools['my_server'] = $this->transport->tools['demo'];
+
+        self::assertSame('my_server', $this->servers->rows['my_server']['name'], 'stored under the normalised name');
+        self::assertNotNull($this->catalog()->serverConfig('my-server'));
+        self::assertNotNull($this->catalog()->serverConfig('my_server'));
+        self::assertCount(6, $this->catalog()->entriesForServer('my-server'));
     }
 
     #[Test]

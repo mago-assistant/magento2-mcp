@@ -10,6 +10,7 @@ use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Serialize\Serializer\Json;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
+use MagoAssistant\Mcp\Service\Discovery\NameMigration;
 use MagoAssistant\Mcp\Service\Discovery\ServerMerger;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
 
@@ -121,6 +122,21 @@ class Repository implements ServerRepositoryInterface
             'updated' => count($plan['update']),
             'missing' => count($plan['missing']),
         ];
+    }
+
+    public function migrateLegacyNames(): array
+    {
+        $plan = NameMigration::plan($this->getAll());
+        $connection = $this->resourceConnection->getConnection();
+        // Raw names on purpose: these rows are exactly the ones a normalised lookup cannot reach.
+        foreach ($plan['delete'] as $name) {
+            $connection->delete($this->table(), ['name = ?' => $name]);
+        }
+        foreach ($plan['rename'] as $old => $new) {
+            $connection->update($this->table(), ['name' => $new], ['name = ?' => $old]);
+        }
+
+        return ['renamed' => count($plan['rename']), 'deleted' => count($plan['delete'])];
     }
 
     /**
