@@ -8,6 +8,8 @@
     </rule>
 
     <exclude-pattern>registration.php</exclude-pattern>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/.phpunit.cache/*</exclude-pattern>
     <exclude-pattern>Test/Unit/Fakes/fake-mcp-server.php</exclude-pattern>
 
     <rule ref="Generic.PHP.RequireStrictTypes">
