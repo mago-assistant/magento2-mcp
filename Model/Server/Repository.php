@@ -7,6 +7,7 @@ declare(strict_types=1);
 namespace MagoAssistant\Mcp\Model\Server;
 
 use Magento\Framework\App\ResourceConnection;
+use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Framework\Serialize\Serializer\Json;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
@@ -21,7 +22,8 @@ class Repository implements ServerRepositoryInterface
     public function __construct(
         private readonly ResourceConnection $resourceConnection,
         private readonly Json $json,
-        private readonly ServerMerger $merger
+        private readonly ServerMerger $merger,
+        private readonly EncryptorInterface $encryptor
     ) {
     }
 
@@ -69,12 +71,17 @@ class Repository implements ServerRepositoryInterface
             'missing' => (int)(bool)($row['missing'] ?? false),
             'last_error' => $row['last_error'] ?? null,
         ];
-        $this->resourceConnection->getConnection()->insertOnDuplicate(
-            $this->table(),
-            $data,
-            ['command', 'env', 'cwd', 'label', 'transport', 'url', 'auth_type', 'allowed_tools', 'timeout',
-                'output_public', 'replaces_skill', 'source', 'enabled', 'missing', 'last_error']
-        );
+        if (array_key_exists('bearer_token', $row)) {
+            $data['bearer_token'] = (string)$row['bearer_token'] !== ''
+                ? $this->encryptor->encrypt((string)$row['bearer_token'])
+                : null;
+        }
+        $update = ['command', 'env', 'cwd', 'label', 'transport', 'url', 'auth_type', 'allowed_tools', 'timeout',
+            'output_public', 'replaces_skill', 'source', 'enabled', 'missing', 'last_error'];
+        if (array_key_exists('bearer_token', $data)) {
+            $update[] = 'bearer_token';
+        }
+        $this->resourceConnection->getConnection()->insertOnDuplicate($this->table(), $data, $update);
     }
 
     public function setEnabled(string $name, bool $enabled): void
@@ -95,22 +102,14 @@ class Repository implements ServerRepositoryInterface
         }
         $plan = $this->merger->plan($existing, $discovered);
         foreach ($plan['insert'] as $server) {
-            $this->save([
-                'name' => $server->name,
-                'command' => $server->command,
-                'env' => $server->env,
-                'cwd' => $server->cwd,
-                'source' => $server->source,
-                'enabled' => false,
-            ]);
+            $this->save($server->toRow() + ['enabled' => false]);
         }
         foreach ($plan['update'] as $server) {
-            $this->update($server->name, [
-                'command' => $this->json->serialize($server->command),
-                'env' => $this->json->serialize($server->env),
-                'cwd' => $server->cwd,
-                'source' => $server->source,
-                'missing' => 0,
+            // save() is an upsert: every storable column follows the source, the row keeps its state.
+            $this->save($server->toRow() + [
+                'missing' => false,
+                'enabled' => (bool)($existing[$server->name]['enabled'] ?? false),
+                'last_error' => $existing[$server->name]['last_error'] ?? null,
             ]);
         }
         foreach ($plan['missing'] as $name) {
@@ -172,8 +171,9 @@ class Repository implements ServerRepositoryInterface
         $row['replaces_skill'] = (string)($row['replaces_skill'] ?? '');
         $row['enabled'] = (bool)$row['enabled'];
         $row['missing'] = (bool)$row['missing'];
-        // Plan 2 decrypts it; until then the token never leaves the repository.
-        unset($row['bearer_token']);
+        $row['bearer_token'] = isset($row['bearer_token']) && $row['bearer_token'] !== ''
+            ? $this->encryptor->decrypt((string)$row['bearer_token'])
+            : '';
 
         return $row;
     }

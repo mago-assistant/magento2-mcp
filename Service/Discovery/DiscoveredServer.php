@@ -10,19 +10,55 @@ final class DiscoveredServer
 {
     public const SOURCE_COMPOSER = 'composer';
     public const SOURCE_MCP_JSON = 'mcp_json';
+    public const SOURCE_MODULE = 'module';
     public const SOURCE_MANUAL = 'manual';
 
     /**
-     * @param string[] $command
+     * @param string[] $command stdio argv; [] for http
      * @param array<string,string> $env
+     * @param string[] $allowedTools
      */
     public function __construct(
         public readonly string $name,
         public readonly array $command,
         public readonly array $env,
         public readonly ?string $cwd,
-        public readonly string $source
+        public readonly string $source,
+        public readonly string $label = '',
+        public readonly string $transport = 'stdio',
+        public readonly string $url = '',
+        public readonly string $authType = 'none',
+        public readonly string $bearerToken = '',
+        public readonly array $allowedTools = [],
+        public readonly ?int $timeout = null,
+        public readonly bool $outputPublic = false,
+        public readonly string $replacesSkill = ''
     ) {
+    }
+
+    /**
+     * The storable columns, in the decoded shape ServerRepositoryInterface::save() accepts.
+     *
+     * @return array<string,mixed>
+     */
+    public function toRow(): array
+    {
+        return [
+            'name' => $this->name,
+            'command' => $this->command,
+            'env' => $this->env,
+            'cwd' => $this->cwd,
+            'source' => $this->source,
+            'label' => $this->label,
+            'transport' => $this->transport,
+            'url' => $this->url,
+            'auth_type' => $this->authType,
+            'bearer_token' => $this->bearerToken,
+            'allowed_tools' => $this->allowedTools,
+            'timeout' => $this->timeout,
+            'output_public' => $this->outputPublic,
+            'replaces_skill' => $this->replacesSkill,
+        ];
     }
 
     private const NAME_PREFIXES = ['magento2_', 'magento_', 'module_'];
