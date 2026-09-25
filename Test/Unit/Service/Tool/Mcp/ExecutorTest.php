@@ -14,6 +14,7 @@ use MagoAssistant\Mcp\Model\Config;
 use MagoAssistant\Mcp\Service\Catalog\CatalogEntry;
 use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
+use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
 use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
@@ -160,5 +161,112 @@ final class ExecutorTest extends TestCase
         self::assertSame(['error' => 'server exploded'], $result);
         self::assertStringContainsString('server exploded', $this->log->messages());
         self::assertStringContainsString('mcp_demo__stock_set', $this->log->messages());
+    }
+
+    #[Test]
+    public function aNonPublicServerAlwaysAnswersWithText(): void
+    {
+        $this->servers->add('demo', true);
+        $this->transport->nextResult = [
+            'content' => [['type' => 'text', 'text' => '{"qty":3}']],
+            'structuredContent' => ['qty' => 3],
+            'isError' => false,
+        ];
+
+        $result = $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3]);
+
+        self::assertSame(['server' => 'demo', 'action' => 'stock-set', 'result' => '{"qty":3}'], $result);
+    }
+
+    #[Test]
+    public function aNonPublicServersStructuredOnlyResultIsJsonText(): void
+    {
+        $this->servers->add('demo', true);
+        $this->transport->nextResult = ['content' => [], 'structuredContent' => ['qty' => 3, 'sku' => 'A'], 'isError' => false];
+
+        $result = $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3]);
+
+        self::assertSame('{"qty":3,"sku":"A"}', $result['result']);
+    }
+
+    #[Test]
+    public function aPublicServerGetsStructuredContentAsData(): void
+    {
+        $this->servers->add('demo', true, 'composer', ['output_public' => true]);
+        $this->transport->nextResult = [
+            'content' => [['type' => 'text', 'text' => 'ignored when structured content exists']],
+            'structuredContent' => ['qty' => 3],
+            'isError' => false,
+        ];
+
+        self::assertSame(['qty' => 3], $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3])['result']);
+    }
+
+    #[Test]
+    public function aPublicServersSingleJsonTextBlockIsDecoded(): void
+    {
+        $this->servers->add('demo', true, 'composer', ['output_public' => true]);
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => '{"items":[1,2]}']], 'isError' => false];
+
+        self::assertSame(['items' => [1, 2]], $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3])['result']);
+    }
+
+    #[Test]
+    public function aPublicServersScalarJsonTextStaysText(): void
+    {
+        $this->servers->add('demo', true, 'composer', ['output_public' => true]);
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => '42']], 'isError' => false];
+
+        self::assertSame('42', $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3])['result']);
+    }
+
+    #[Test]
+    public function aPublicServersTwoTextBlocksStayJoinedText(): void
+    {
+        $this->servers->add('demo', true, 'composer', ['output_public' => true]);
+        $this->transport->nextResult = [
+            'content' => [['type' => 'text', 'text' => '{"a":1}'], ['type' => 'text', 'text' => '{"b":2}']],
+            'isError' => false,
+        ];
+
+        self::assertSame("{\"a\":1}\n\n{\"b\":2}", $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3])['result']);
+    }
+
+    #[Test]
+    public function anErrorResultIsMagosErrorShape(): void
+    {
+        $this->servers->add('demo', true);
+        $this->transport->nextResult = [
+            'content' => [['type' => 'text', 'text' => 'This domain does not exist: shop.com']],
+            'isError' => true,
+        ];
+
+        $result = $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3]);
+
+        self::assertSame(['error' => 'This domain does not exist: shop.com'], $result, 'no hints configured on the row');
+        self::assertArrayNotHasKey('is_error', $result);
+    }
+
+    #[Test]
+    public function anErrorWithoutTextSaysTheToolReportedAnError(): void
+    {
+        $this->servers->add('demo', true);
+        $this->transport->nextResult = ['content' => [], 'isError' => true];
+
+        self::assertSame(
+            ['error' => 'The MCP tool reported an error.'],
+            $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3])
+        );
+    }
+
+    #[Test]
+    public function anErrorHintIsAppendedWhenItsFragmentMatches(): void
+    {
+        $executor = $this->executor();
+        $method = new \ReflectionMethod($executor, 'withHint');
+        $server = new ServerConfig('demo', ['php'], errorHints: ['does not exist' => 'List the domains first.', 'never' => 'unused']);
+
+        self::assertSame('Domain does not exist. List the domains first.', $method->invoke($executor, $server, 'Domain does not exist.'));
+        self::assertSame('Other failure', $method->invoke($executor, $server, 'Other failure'));
     }
 }

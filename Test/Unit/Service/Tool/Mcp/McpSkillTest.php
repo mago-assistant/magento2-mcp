@@ -13,6 +13,7 @@ use MagoAssistant\Mago\Logger\ErrorLogger;
 use MagoAssistant\Mago\Service\Privacy\PiiClass;
 use MagoAssistant\Mago\Service\Tool\ToolRegistry;
 use MagoAssistant\Mcp\Model\Config;
+use MagoAssistant\Mcp\Service\Catalog\CatalogEntry;
 use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
@@ -261,7 +262,7 @@ final class McpSkillTest extends TestCase
         $result = $this->skill('product-list')->execute(['limit' => 5, 'sku' => 'SECRET-SKU']);
 
         self::assertSame(['demo', 'product-list', ['limit' => 5, 'sku' => 'SECRET-SKU']], $this->transport->calls[0]);
-        self::assertSame(['server' => 'demo', 'action' => 'product-list', 'content' => "one\n\ntwo", 'is_error' => false], $result);
+        self::assertSame(['server' => 'demo', 'action' => 'product-list', 'result' => "one\n\ntwo"], $result);
         $logged = $this->log->messages();
         self::assertStringContainsString('MCP call', $logged);
         self::assertStringContainsString('"skill":"mcp_demo__product_list"', $logged);
@@ -270,15 +271,73 @@ final class McpSkillTest extends TestCase
     }
 
     #[Test]
-    public function isErrorAndTruncationAreReported(): void
+    public function anErrorResultIsReturnedInMagosErrorShape(): void
+    {
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => 'boom']], 'isError' => true];
+
+        self::assertSame(['error' => 'boom'], $this->skill('product-list')->execute(['limit' => 1]));
+    }
+
+    #[Test]
+    public function longTextIsTruncated(): void
     {
         $this->maxChars = 10;
-        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => str_repeat('x', 25)]], 'isError' => true];
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => str_repeat('x', 25)]], 'isError' => false];
 
-        $result = $this->skill('product-list')->execute(['limit' => 1]);
+        self::assertSame(
+            str_repeat('x', 10) . ' [truncated: 15 more characters]',
+            $this->skill('product-list')->execute(['limit' => 1])['result']
+        );
+    }
 
-        self::assertTrue($result['is_error']);
-        self::assertSame(str_repeat('x', 10) . ' [truncated: 15 more characters]', $result['content']);
+    #[Test]
+    public function aNonPublicServersResultIsOnePublicStringForTheScrub(): void
+    {
+        self::assertSame(
+            ['server' => [PiiClass::PUBLIC], 'action' => [PiiClass::PUBLIC], 'result' => [PiiClass::PUBLIC]],
+            $this->skill('product-list')->getFieldClassification()
+        );
+    }
+
+    #[Test]
+    public function aPublicServersResultIsWildcardPublic(): void
+    {
+        $this->servers->rows['demo']['output_public'] = true;
+
+        self::assertSame(
+            ['server' => [PiiClass::PUBLIC], 'action' => [PiiClass::PUBLIC], PiiClass::ANY => [PiiClass::PUBLIC]],
+            $this->skill('product-list')->getFieldClassification()
+        );
+    }
+
+    #[Test]
+    public function aToolOverrideReplacesTheWildcardOnAPublicServer(): void
+    {
+        $entry = new CatalogEntry(
+            'demo',
+            'who-am-i',
+            'Who.',
+            ['type' => 'object'],
+            ModeClassifier::READ,
+            CatalogEntry::ORIGIN_CLASSIFIER,
+            false,
+            false,
+            '',
+            true,
+            [PiiClass::ANY => [PiiClass::PUBLIC], 'name' => [PiiClass::STRIP], 'email' => [PiiClass::STRIP]]
+        );
+        $skill = new McpSkill($entry, $this->createStub(Executor::class));
+
+        self::assertSame(
+            [
+                'server' => [PiiClass::PUBLIC],
+                'action' => [PiiClass::PUBLIC],
+                PiiClass::ANY => [PiiClass::PUBLIC],
+                'name' => [PiiClass::STRIP],
+                'email' => [PiiClass::STRIP],
+            ],
+            $skill->getFieldClassification()
+        );
     }
 
     #[Test]
@@ -288,7 +347,7 @@ final class McpSkillTest extends TestCase
 
         $result = $this->skill('product-list')->execute(['limit' => 1]);
 
-        self::assertSame('(no text content: 1 image block)', $result['content']);
+        self::assertSame('(no text content: 1 image block)', $result['result']);
     }
 
     #[Test]

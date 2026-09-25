@@ -171,14 +171,20 @@ class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingTo
         return implode("\n\n", $blocks);
     }
 
+    /**
+     * Flat, applied by Mago at every depth. A non-public server's result is one string declared public,
+     * so Mago's heuristic scrub and vault concealment run over it (an undeclared field would be dropped,
+     * not scrubbed). A public server's result is data under a wildcard, or the tool's own override from a
+     * module definition, which must carry the wildcard itself or "result" has no rule and is dropped.
+     */
     public function getFieldClassification(string $action = ''): array
     {
-        return [
-            'server' => [PiiClass::PUBLIC],
-            'action' => [PiiClass::PUBLIC],
-            'content' => [PiiClass::PUBLIC],
-            'is_error' => [PiiClass::PUBLIC],
-        ];
+        $classes = ['server' => [PiiClass::PUBLIC], 'action' => [PiiClass::PUBLIC]];
+        if (!$this->entry->outputPublic) {
+            return $classes + ['result' => [PiiClass::PUBLIC]];
+        }
+
+        return $classes + ($this->entry->fieldClassification ?? [PiiClass::ANY => [PiiClass::PUBLIC]]);
     }
 
     public function getMagentoAcl(array $input = []): string
