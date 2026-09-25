@@ -33,6 +33,7 @@ class ToolProvider
      * @param CacheInterface $cache
      * @param Json $json
      * @param ErrorLogger $errorLogger
+     * @param InstructionGate $instructionGate
      * @param ServerInterface[] $servers
      */
     public function __construct(
@@ -40,6 +41,7 @@ class ToolProvider
         private readonly CacheInterface $cache,
         private readonly Json $json,
         private readonly ErrorLogger $errorLogger,
+        private readonly InstructionGate $instructionGate,
         array $servers = []
     ) {
         $this->servers = $servers;
@@ -64,7 +66,15 @@ class ToolProvider
             if ($definition['tools'] === []) {
                 continue;
             }
-            $tools[] = new McpTool($server, $this->client, $definition['tools'], $definition['instructions']);
+            foreach ($definition['tools'] as $remoteTool) {
+                $tools[] = new McpTool(
+                    $server,
+                    $this->client,
+                    $remoteTool,
+                    $this->instructionGate,
+                    $definition['instructions']
+                );
+            }
         }
 
         return $this->tools = $tools;

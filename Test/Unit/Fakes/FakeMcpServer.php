@@ -63,4 +63,9 @@ final class FakeMcpServer implements ServerInterface
     {
         return $this->classification;
     }
+
+    public function getErrorHint(string $toolName, string $error): string
+    {
+        return str_contains($error, 'does not exist') ? 'List the domains first.' : '';
+    }
 }

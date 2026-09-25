@@ -11,6 +11,7 @@ use MagoAssistant\Mago\Service\Skills\PermissionChecker;
 use MagoAssistant\Mago\Service\Tool\ToolRegistry;
 use MagoAssistant\Mcp\Plugin\AddMcpToolsToRegistry;
 use MagoAssistant\Mcp\Service\Client;
+use MagoAssistant\Mcp\Service\InstructionGate;
 use MagoAssistant\Mcp\Service\McpTool;
 use MagoAssistant\Mcp\Service\ToolProvider;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpServer;
@@ -26,10 +27,12 @@ final class AddMcpToolsToRegistryTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mcpTool = new McpTool(new FakeMcpServer(), $this->createStub(Client::class), [
+        $this->mcpTool = new McpTool(
+            new FakeMcpServer(),
+            $this->createStub(Client::class),
             ['name' => 'read_wiki', 'annotations' => ['readOnlyHint' => true]],
-            ['name' => 'write_wiki'],
-        ]);
+            new InstructionGate()
+        );
         $provider = $this->createStub(ToolProvider::class);
         $provider->method('getTools')->willReturn([$this->mcpTool]);
         $this->plugin = new AddMcpToolsToRegistry($provider);
@@ -40,19 +43,21 @@ final class AddMcpToolsToRegistryTest extends TestCase
     {
         $builtIn = $this->createStub(ToolInterface::class);
 
-        $result = $this->plugin->afterGetAllTools($this->registry([]), ['mcp_test' => $builtIn, 'cms_data' => $builtIn]);
+        $name = 'mcp_test__read_wiki';
+        $result = $this->plugin->afterGetAllTools($this->registry([]), [$name => $builtIn, 'cms_data' => $builtIn]);
 
-        self::assertSame($builtIn, $result['mcp_test']);
+        self::assertSame($builtIn, $result[$name]);
         self::assertCount(2, $result);
-        self::assertSame($this->mcpTool, $this->plugin->afterGetAllTools($this->registry([]), [])['mcp_test']);
+        self::assertSame($this->mcpTool, $this->plugin->afterGetAllTools($this->registry([]), [])[$name]);
     }
 
     #[Test]
-    public function offersAnMcpToolWithAReadGrantWhenItHasAReadOnlyAction(): void
+    public function offersAReadOnlyMcpToolWithAReadGrant(): void
     {
-        $enabled = $this->plugin->afterGetEnabledTools($this->registry(['mcp_test:read' => true]), [], self::ADMIN_ID);
+        $registry = $this->registry(['mcp_test__read_wiki:read' => true]);
+        $enabled = $this->plugin->afterGetEnabledTools($registry, [], self::ADMIN_ID);
 
-        self::assertSame(['mcp_test' => $this->mcpTool], $enabled);
+        self::assertSame(['mcp_test__read_wiki' => $this->mcpTool], $enabled);
     }
 
     #[Test]
@@ -67,8 +72,8 @@ final class AddMcpToolsToRegistryTest extends TestCase
         $builtIn = $this->createStub(ToolInterface::class);
         $registry = $this->registry([]);
 
-        self::assertSame($builtIn, $this->plugin->afterGetToolByName($registry, $builtIn, 'mcp_test'));
-        self::assertSame($this->mcpTool, $this->plugin->afterGetToolByName($registry, null, 'mcp_test'));
+        self::assertSame($builtIn, $this->plugin->afterGetToolByName($registry, $builtIn, 'mcp_test__read_wiki'));
+        self::assertSame($this->mcpTool, $this->plugin->afterGetToolByName($registry, null, 'mcp_test__read_wiki'));
         self::assertNull($this->plugin->afterGetToolByName($registry, null, 'unknown'));
     }
 

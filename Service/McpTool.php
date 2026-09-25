@@ -6,75 +6,98 @@ declare(strict_types=1);
 
 namespace MagoAssistant\Mcp\Service;
 
-use MagoAssistant\Mcp\Api\ServerInterface;
-use MagoAssistant\Mago\Api\Tool\ActionScopedToolInterface;
+use MagoAssistant\Mago\Api\Tool\ToolInterface;
 use MagoAssistant\Mago\Api\Tool\ValidatingToolInterface;
+use MagoAssistant\Mcp\Api\ServerInterface;
 
 /**
- * All tools of one MCP server as a single assistant tool: each remote tool is an action.
+ * One remote MCP tool as an assistant tool, with the remote tool's own schema. One tool per remote
+ * tool (instead of one tool with an action per remote tool) keeps each schema exact: with a merged
+ * schema models dropped the action and mixed up parameters that differ between tools.
  */
-class McpTool implements ActionScopedToolInterface, ValidatingToolInterface
+class McpTool implements ToolInterface, ValidatingToolInterface
 {
-    private const SHORT_DESCRIPTION_LENGTH = 200;
-
-    /** @var array<string, array<string, mixed>> Remote tool definitions keyed by name */
-    private readonly array $remoteTools;
+    // OpenAI rejects tool names longer than 64 characters.
+    private const MAX_NAME_LENGTH = 64;
 
     /**
      * @param ServerInterface $server
      * @param Client $client
-     * @param array<int, array<string, mixed>> $remoteTools As returned by tools/list
+     * @param array<string, mixed> $remoteTool One entry of tools/list
+     * @param InstructionGate $instructionGate
      * @param string $serverInstructions The instructions the server sent on initialize
      */
     public function __construct(
         private readonly ServerInterface $server,
         private readonly Client $client,
-        array $remoteTools,
+        private readonly array $remoteTool,
+        private readonly InstructionGate $instructionGate,
         private readonly string $serverInstructions = ''
     ) {
-        $byName = [];
-        foreach ($remoteTools as $tool) {
-            $byName[(string)$tool['name']] = $tool;
-        }
-        $this->remoteTools = $byName;
+    }
+
+    public function getServer(): ServerInterface
+    {
+        return $this->server;
+    }
+
+    public function getRemoteName(): string
+    {
+        return (string)$this->remoteTool['name'];
     }
 
     public function getName(): string
     {
-        return 'mcp_' . (preg_replace('/[^a-z0-9_]+/', '_', strtolower($this->server->getCode())) ?? '');
+        return self::nameFor($this->server->getCode(), $this->getRemoteName());
+    }
+
+    /**
+     * mcp_<server>__<remote tool>, restricted to the characters and length every AI provider accepts
+     */
+    public static function nameFor(string $serverCode, string $remoteName): string
+    {
+        $slug = static fn (string $value): string => trim(
+            (string)preg_replace('/[^a-z0-9_]+/', '_', strtolower($value)),
+            '_'
+        );
+        $name = 'mcp_' . $slug($serverCode) . '__' . $slug($remoteName);
+        if (strlen($name) > self::MAX_NAME_LENGTH) {
+            $name = substr($name, 0, self::MAX_NAME_LENGTH - 9) . '_' . substr(hash('sha256', $name), 0, 8);
+        }
+
+        return $name;
     }
 
     public function getDescription(): string
     {
-        return $this->buildDescription(array_keys($this->remoteTools));
-    }
+        $description = trim((string)($this->remoteTool['description'] ?? ''));
 
-    public function getDescriptionForActions(array $actionNames): string
-    {
-        return $this->buildDescription($this->selectActions($actionNames));
+        return sprintf(
+            '[%s] %s',
+            $this->server->getLabel(),
+            $description !== '' ? $description : $this->getRemoteName()
+        );
     }
 
     public function getParameterSchema(): array
     {
-        return $this->buildParameterSchema(array_keys($this->remoteTools));
-    }
+        $schema = is_array($this->remoteTool['inputSchema'] ?? null) ? $this->remoteTool['inputSchema'] : [];
+        $schema['type'] = 'object';
+        // Providers reject an object schema without properties; an empty list would encode as [].
+        if (!is_array($schema['properties'] ?? null) || $schema['properties'] === []) {
+            $schema['properties'] = new \stdClass();
+        }
 
-    public function getParameterSchemaForActions(array $actionNames): array
-    {
-        return $this->buildParameterSchema($this->selectActions($actionNames));
+        return $schema;
     }
 
     public function execute(array $params): array
     {
-        $action = (string)($params['action'] ?? '');
-        if (!isset($this->remoteTools[$action])) {
-            return ['error' => 'Unknown action: ' . $action];
-        }
         $adminUserId = isset($params['_admin_user_id']) ? (int)$params['_admin_user_id'] : null;
-        unset($params['action'], $params['_admin_user_id']);
+        unset($params['_admin_user_id']);
 
         try {
-            $result = $this->client->callTool($this->server, $action, $params, $adminUserId);
+            $result = $this->client->callTool($this->server, $this->getRemoteName(), $params, $adminUserId);
         } catch (McpException $e) {
             return ['error' => $e->getMessage()];
         }
@@ -84,131 +107,44 @@ class McpTool implements ActionScopedToolInterface, ValidatingToolInterface
 
     public function isReadOnly(): bool
     {
-        foreach (array_keys($this->remoteTools) as $name) {
-            if (!$this->isReadOnlyAction(['action' => $name])) {
-                return false;
-            }
-        }
-
-        return true;
+        // MCP's readOnlyHint defaults to false: a tool that does not declare it is treated as a write.
+        return ($this->remoteTool['annotations']['readOnlyHint'] ?? false) === true;
     }
 
     public function isReadOnlyAction(array $input): bool
     {
-        // MCP's readOnlyHint defaults to false: a tool that does not declare it is treated as a write.
-        $tool = $this->remoteTools[(string)($input['action'] ?? '')] ?? null;
-
-        return $tool !== null && ($tool['annotations']['readOnlyHint'] ?? false) === true;
+        return $this->isReadOnly();
     }
 
     public function findRefusal(array $input): ?array
     {
-        $action = (string)($input['action'] ?? '');
-        if (!isset($this->remoteTools[$action])) {
-            return ['error' => 'Unknown action: ' . $action];
-        }
-
-        $required = $this->remoteTools[$action]['inputSchema']['required'] ?? [];
+        $required = $this->remoteTool['inputSchema']['required'] ?? [];
         $missing = array_values(array_filter(
             is_array($required) ? $required : [],
             static fn ($name): bool => !isset($input[$name]) || $input[$name] === ''
         ));
 
         return $missing !== []
-            ? ['error' => sprintf('Missing required parameter(s) for %s: %s', $action, implode(', ', $missing))]
+            ? ['error' => sprintf('Missing required parameter(s): %s', implode(', ', $missing))]
             : null;
     }
 
     public function getInstructions(): string
     {
-        $parts = [];
-        if (trim($this->serverInstructions) !== '') {
-            $parts[] = trim($this->serverInstructions);
-        }
-        // The tool description only carries the first sentence per action; the full text goes here.
-        foreach ($this->remoteTools as $name => $tool) {
-            $description = trim((string)($tool['description'] ?? ''));
-            if ($description !== '' && $description !== $this->shortDescription($description)) {
-                $parts[] = '## ' . $name . "\n" . $description;
-            }
-        }
+        // The server's instructions cover all its tools: sent with the first of them used per request.
+        $instructions = trim($this->serverInstructions);
 
-        return implode("\n\n", $parts);
+        return $instructions !== '' && $this->instructionGate->claim($this->server->getCode()) ? $instructions : '';
     }
 
     public function getFieldClassification(string $action = ''): array
     {
-        return isset($this->remoteTools[$action]) ? $this->server->getFieldClassification($action) : [];
+        return $this->server->getFieldClassification($this->getRemoteName());
     }
 
     public function getMagentoAcl(array $input = []): string
     {
         return '';
-    }
-
-    /**
-     * @param string[] $actionNames
-     */
-    private function buildDescription(array $actionNames): string
-    {
-        $parts = [];
-        foreach ($actionNames as $name) {
-            $description = (string)($this->remoteTools[$name]['description'] ?? '');
-            $parts[] = '"' . $name . '" (' . $this->shortDescription($description) . ')';
-        }
-
-        return sprintf('Tools from the external MCP server "%s".', $this->server->getLabel())
-            . ' Actions: ' . implode(', ', $parts) . '.';
-    }
-
-    /**
-     * @param string[] $actionNames
-     * @return array<string, mixed>
-     */
-    private function buildParameterSchema(array $actionNames): array
-    {
-        $properties = [];
-        foreach ($actionNames as $name) {
-            $remoteProperties = $this->remoteTools[$name]['inputSchema']['properties'] ?? [];
-            foreach (is_array($remoteProperties) ? $remoteProperties : [] as $paramName => $paramSchema) {
-                if ($paramName !== 'action' && !isset($properties[$paramName])) {
-                    $properties[$paramName] = $paramSchema;
-                }
-            }
-        }
-
-        return [
-            'type' => 'object',
-            'properties' => array_merge(
-                ['action' => ['type' => 'string', 'enum' => $actionNames, 'description' => 'The action to perform']],
-                $properties
-            ),
-            'required' => ['action'],
-        ];
-    }
-
-    /**
-     * @param string[] $actionNames
-     * @return string[]
-     */
-    private function selectActions(array $actionNames): array
-    {
-        return array_values(array_filter(
-            array_keys($this->remoteTools),
-            static fn (string $name): bool => in_array($name, $actionNames, true)
-        ));
-    }
-
-    private function shortDescription(string $description): string
-    {
-        $description = trim(preg_replace('/\s+/', ' ', $description) ?? '');
-        if (preg_match('/^.+?[.!?](?=\s|$)/', $description, $match)) {
-            $description = $match[0];
-        }
-
-        return mb_strlen($description) > self::SHORT_DESCRIPTION_LENGTH
-            ? rtrim(mb_substr($description, 0, self::SHORT_DESCRIPTION_LENGTH - 1)) . '…'
-            : $description;
     }
 
     /**
@@ -225,7 +161,10 @@ class McpTool implements ActionScopedToolInterface, ValidatingToolInterface
         }
 
         if (($result['isError'] ?? false) === true) {
-            return ['error' => $texts !== [] ? implode("\n", $texts) : 'The MCP tool reported an error.'];
+            $error = $texts !== [] ? implode("\n", $texts) : 'The MCP tool reported an error.';
+            $hint = $this->server->getErrorHint($this->getRemoteName(), $error);
+
+            return ['error' => $hint !== '' ? $error . ' ' . $hint : $error];
         }
         if (is_array($result['structuredContent'] ?? null)) {
             return ['result' => $result['structuredContent']];

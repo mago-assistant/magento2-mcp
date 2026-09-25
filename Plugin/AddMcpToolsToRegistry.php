@@ -65,16 +65,12 @@ class AddMcpToolsToRegistry
     }
 
     /**
-     * Mirrors the registry's private availability check: a read grant is enough when the tool has
-     * a read-only action, otherwise a write grant is needed.
+     * Mirrors the registry's private availability check: read grant for a read-only tool, write grant otherwise
      */
     private function isAvailable(ToolRegistry $registry, ToolInterface $tool, ?int $adminUserId): bool
     {
-        foreach ($tool->getParameterSchema()['properties']['action']['enum'] ?? [] as $action) {
-            if ($tool->isReadOnlyAction(['action' => $action])) {
-                return $registry->isCallAllowed($tool, ['action' => $action], $adminUserId);
-            }
-        }
-        return $registry->hasWriteAccess($tool, $adminUserId);
+        return $tool->isReadOnly()
+            ? $registry->isCallAllowed($tool, [], $adminUserId)
+            : $registry->hasWriteAccess($tool, $adminUserId);
     }
 }

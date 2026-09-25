@@ -5,7 +5,7 @@
         <section id="mago">
             <group id="mcp" translate="label comment" type="text" sortOrder="37" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>MCP Server</label>
-                <comment><![CDATA[Let the assistant use the tools of a remote MCP server (Streamable HTTP). Run <code>bin/magento mago:mcp:tools --refresh</code> to check the connection. The tools appear on the Skills page as <code>mcp_custom</code>.]]></comment>
+                <comment><![CDATA[Let the assistant use the tools of a remote MCP server (Streamable HTTP). Run <code>bin/magento mago:mcp:tools --refresh</code> to check the connection. Each remote tool appears on the Skills page as <code>mcp_custom__&lt;tool&gt;</code>.]]></comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>

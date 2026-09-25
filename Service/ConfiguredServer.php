@@ -21,11 +21,19 @@ class ConfiguredServer implements ServerInterface
 {
     private const DEFAULT_TIMEOUT = 20;
 
+    /**
+     * @param ScopeConfigInterface $scopeConfig
+     * @param EncryptorInterface $encryptor
+     * @param string $code
+     * @param string $configPath
+     * @param array<string, string> $errorHints Error text fragment => hint appended to that error
+     */
     public function __construct(
         private readonly ScopeConfigInterface $scopeConfig,
         private readonly EncryptorInterface $encryptor,
         private readonly string $code = 'custom',
-        private readonly string $configPath = 'mago/mcp'
+        private readonly string $configPath = 'mago/mcp',
+        private readonly array $errorHints = []
     ) {
     }
 
@@ -72,6 +80,16 @@ class ConfiguredServer implements ServerInterface
     {
         // The admin asserts per server that its output holds no personal data; otherwise fail closed.
         return $this->value('output_public') === '1' ? [PiiClass::ANY => [PiiClass::PUBLIC]] : [];
+    }
+
+    public function getErrorHint(string $toolName, string $error): string
+    {
+        foreach ($this->errorHints as $fragment => $hint) {
+            if (str_contains($error, (string)$fragment)) {
+                return $hint;
+            }
+        }
+        return '';
     }
 
     private function value(string $field): string

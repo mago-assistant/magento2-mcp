@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 namespace MagoAssistant\Mcp\Console\Command;
 
+use MagoAssistant\Mcp\Service\McpTool;
 use MagoAssistant\Mcp\Service\ToolProvider;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Helper\Table;
@@ -56,10 +57,14 @@ class McpTools extends Command
             }
 
             $table = new Table($output);
-            $table->setHeaders(['Tool', 'Read-only']);
+            $table->setHeaders(['Remote tool', 'Assistant tool', 'Read-only']);
             foreach ($definition['tools'] as $tool) {
                 $isReadOnly = ($tool['annotations']['readOnlyHint'] ?? false) === true;
-                $table->addRow([$tool['name'], $isReadOnly ? 'yes' : 'no']);
+                $table->addRow([
+                    $tool['name'],
+                    McpTool::nameFor($server->getCode(), (string)$tool['name']),
+                    $isReadOnly ? 'yes' : 'no',
+                ]);
             }
             $table->render();
         }

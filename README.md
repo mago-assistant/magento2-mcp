@@ -32,12 +32,14 @@ bin/magento mago:mcp:tools --refresh
 
 ## How it works
 
-- All tools of a server become one assistant tool, `mcp_<code>`, with each remote tool as an `action`. It shows up on
-  Mago's Skills page, so read/write grants per admin user apply.
-- An action is read-only only when the remote tool declares `annotations.readOnlyHint: true`. Anything else is a write and
+- Every remote tool becomes its own assistant tool, `mcp_<server>__<tool>` (e.g. `mcp_custom__read_wiki_structure`),
+  with the remote tool's own schema and description. They show up on Mago's Skills page, so read/write grants per admin
+  user apply. (An earlier version bundled all tools of a server into one tool with an `action` parameter; models then
+  dropped the action and mixed up parameters that differ between tools.)
+- A tool is read-only only when the remote tool declares `annotations.readOnlyHint: true`. Anything else is a write and
   goes through Mago's confirmation flow.
-- The tool description carries the first sentence per action; the server's `instructions` and full descriptions are sent
-  when the tool is first used.
+- The server's `instructions` are sent once per request, with the first of its tools that is used.
+- Use **Allowed Tools** to leave out tools you don't need: every tool's description is sent on every message.
 - Tool lists are cached for an hour (5 minutes after a failure) and dropped when the configuration is saved.
 
 ## More servers

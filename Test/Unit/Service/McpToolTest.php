@@ -6,87 +6,81 @@ declare(strict_types=1);
 
 namespace MagoAssistant\Mcp\Test\Unit\Service;
 
+use MagoAssistant\Mago\Service\Privacy\PiiClass;
 use MagoAssistant\Mcp\Service\Client;
+use MagoAssistant\Mcp\Service\InstructionGate;
 use MagoAssistant\Mcp\Service\McpException;
 use MagoAssistant\Mcp\Service\McpTool;
-use MagoAssistant\Mago\Service\Privacy\PiiClass;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpServer;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 final class McpToolTest extends TestCase
 {
-    private const REMOTE_TOOLS = [
-        [
-            'name' => 'query-metrics-tool',
-            'description' => 'Query Core Web Vitals field data. Supports breakdowns, filters and comparison periods.',
-            'inputSchema' => [
-                'type' => 'object',
-                'properties' => ['domain' => ['type' => 'string'], 'metrics' => ['type' => 'array']],
-                'required' => ['domain', 'metrics'],
-            ],
-            'annotations' => ['readOnlyHint' => true],
+    private const QUERY_METRICS = [
+        'name' => 'query-metrics-tool',
+        'description' => 'Query Core Web Vitals field data. Supports breakdowns, filters and comparison periods.',
+        'inputSchema' => [
+            'type' => 'object',
+            'properties' => ['domain' => ['type' => 'string'], 'periods' => ['type' => 'object']],
+            'required' => ['domain', 'periods'],
         ],
-        [
-            'name' => 'mark-issue-fixed-tool',
-            'description' => 'Mark findings as fixed.',
-            'inputSchema' => [
-                'type' => 'object',
-                'properties' => ['domain' => ['type' => 'integer'], 'issue_ids' => ['type' => 'array']],
-                'required' => ['domain', 'issue_ids'],
-            ],
+        'annotations' => ['readOnlyHint' => true],
+    ];
+    private const MARK_FIXED = [
+        'name' => 'mark-issue-fixed-tool',
+        'description' => 'Mark findings as fixed.',
+        'inputSchema' => [
+            'type' => 'object',
+            'properties' => ['domain' => ['type' => 'string'], 'issue_ids' => ['type' => 'array']],
+            'required' => ['domain', 'issue_ids'],
         ],
     ];
 
     #[Test]
-    public function exposesEachRemoteToolAsAnAction(): void
+    public function exposesTheRemoteToolWithItsOwnSchemaAndFullDescription(): void
     {
-        $tool = $this->tool();
+        $tool = $this->tool(self::QUERY_METRICS);
 
-        $schema = $tool->getParameterSchema();
-
-        self::assertSame('mcp_test', $tool->getName());
-        self::assertSame(['query-metrics-tool', 'mark-issue-fixed-tool'], $schema['properties']['action']['enum']);
-        self::assertSame(['type' => 'string'], $schema['properties']['domain'], 'first declaration of a shared parameter wins');
-        self::assertArrayHasKey('issue_ids', $schema['properties']);
-        self::assertSame(['action'], $schema['required']);
+        self::assertSame('mcp_test__query_metrics_tool', $tool->getName());
+        self::assertSame('[Test Server] ' . self::QUERY_METRICS['description'], $tool->getDescription());
+        self::assertSame(self::QUERY_METRICS['inputSchema'], $tool->getParameterSchema());
     }
 
     #[Test]
-    public function describesActionsWithTheirFirstSentenceAndKeepsTheRestForInstructions(): void
+    public function givesAToolWithoutParametersAnObjectForProperties(): void
     {
-        $tool = $this->tool('Use sample counts.');
+        $schema = $this->tool(['name' => 'list-domains-tool', 'inputSchema' => ['type' => 'object', 'properties' => []]])
+            ->getParameterSchema();
 
-        self::assertStringContainsString('"query-metrics-tool" (Query Core Web Vitals field data.)', $tool->getDescription());
-        self::assertStringNotContainsString('comparison periods', $tool->getDescription());
-        self::assertStringStartsWith('Use sample counts.', $tool->getInstructions());
-        self::assertStringContainsString("## query-metrics-tool\nQuery Core Web Vitals field data. Supports", $tool->getInstructions());
-        self::assertStringNotContainsString('## mark-issue-fixed-tool', $tool->getInstructions());
+        self::assertSame('{"type":"object","properties":{}}', json_encode($schema));
     }
 
     #[Test]
-    public function treatsToolsWithoutReadOnlyHintAsWrites(): void
+    public function keepsNamesWithinProviderLimits(): void
     {
-        $tool = $this->tool();
+        $name = McpTool::nameFor('My Server', str_repeat('very-long-tool-name-', 5));
 
-        self::assertTrue($tool->isReadOnlyAction(['action' => 'query-metrics-tool']));
-        self::assertFalse($tool->isReadOnlyAction(['action' => 'mark-issue-fixed-tool']));
-        self::assertFalse($tool->isReadOnlyAction(['action' => 'unknown']));
-        self::assertFalse($tool->isReadOnly());
-        self::assertSame(['query-metrics-tool'], $tool->getParameterSchemaForActions(['query-metrics-tool'])['properties']['action']['enum']);
-        self::assertArrayNotHasKey('issue_ids', $tool->getParameterSchemaForActions(['query-metrics-tool'])['properties']);
+        self::assertLessThanOrEqual(64, strlen($name));
+        self::assertMatchesRegularExpression('/^[a-z0-9_]+$/', $name);
+        self::assertSame('mcp_my_server__get_top_issues', McpTool::nameFor('My Server', 'get.top-issues'));
+    }
+
+    #[Test]
+    public function treatsAToolWithoutReadOnlyHintAsAWrite(): void
+    {
+        self::assertTrue($this->tool(self::QUERY_METRICS)->isReadOnly());
+        self::assertFalse($this->tool(self::MARK_FIXED)->isReadOnly());
+        self::assertFalse($this->tool(self::MARK_FIXED)->isReadOnlyAction([]));
     }
 
     #[Test]
     public function refusesAWriteWithoutItsRequiredParameters(): void
     {
-        $tool = $this->tool();
+        $tool = $this->tool(self::MARK_FIXED);
 
-        self::assertSame(
-            ['error' => 'Missing required parameter(s) for mark-issue-fixed-tool: issue_ids'],
-            $tool->findRefusal(['action' => 'mark-issue-fixed-tool', 'domain' => 3])
-        );
-        self::assertNull($tool->findRefusal(['action' => 'mark-issue-fixed-tool', 'domain' => 3, 'issue_ids' => [1]]));
+        self::assertSame(['error' => 'Missing required parameter(s): issue_ids'], $tool->findRefusal(['domain' => 'shop.nl']));
+        self::assertNull($tool->findRefusal(['domain' => 'shop.nl', 'issue_ids' => [1]]));
     }
 
     #[Test]
@@ -95,13 +89,12 @@ final class McpToolTest extends TestCase
         $client = $this->createMock(Client::class);
         $client->expects(self::once())
             ->method('callTool')
-            ->with(self::anything(), 'query-metrics-tool', ['domain' => 'example.com', 'metrics' => ['lcp']], 7)
+            ->with(self::anything(), 'query-metrics-tool', ['domain' => 'shop.nl', 'periods' => ['current' => []]], 7)
             ->willReturn(['content' => [['type' => 'text', 'text' => '{"lcp":1800}']]]);
 
-        $result = $this->tool('', $client)->execute([
-            'action' => 'query-metrics-tool',
-            'domain' => 'example.com',
-            'metrics' => ['lcp'],
+        $result = $this->tool(self::QUERY_METRICS, $client)->execute([
+            'domain' => 'shop.nl',
+            'periods' => ['current' => []],
             '_admin_user_id' => 7,
         ]);
 
@@ -109,40 +102,66 @@ final class McpToolTest extends TestCase
     }
 
     #[Test]
-    public function mapsStructuredContentPlainTextAndErrors(): void
+    public function mapsStructuredContentPlainTextAndErrorsWithHints(): void
     {
         $client = $this->createMock(Client::class);
         $client->method('callTool')->willReturnOnConsecutiveCalls(
             ['structuredContent' => ['rows' => [1]], 'content' => [['type' => 'text', 'text' => 'ignored']]],
             ['content' => [['type' => 'text', 'text' => 'line 1'], ['type' => 'text', 'text' => 'line 2']]],
-            ['isError' => true, 'content' => [['type' => 'text', 'text' => 'Rate limited, retry in 30s']]],
+            ['isError' => true, 'content' => [['type' => 'text', 'text' => 'This domain does not exist.']]],
+            ['isError' => true, 'content' => [['type' => 'text', 'text' => 'Rate limited']]],
             self::throwException(new McpException('MCP server "Test Server" is unreachable: timeout'))
         );
-        $tool = $this->tool('', $client);
-        $call = ['action' => 'query-metrics-tool'];
+        $tool = $this->tool(self::QUERY_METRICS, $client);
 
-        self::assertSame(['result' => ['rows' => [1]]], $tool->execute($call));
-        self::assertSame(['result' => "line 1\nline 2"], $tool->execute($call));
-        self::assertSame(['error' => 'Rate limited, retry in 30s'], $tool->execute($call));
-        self::assertSame(['error' => 'MCP server "Test Server" is unreachable: timeout'], $tool->execute($call));
+        self::assertSame(['result' => ['rows' => [1]]], $tool->execute([]));
+        self::assertSame(['result' => "line 1\nline 2"], $tool->execute([]));
+        self::assertSame(['error' => 'This domain does not exist. List the domains first.'], $tool->execute([]));
+        self::assertSame(['error' => 'Rate limited'], $tool->execute([]));
+        self::assertSame(['error' => 'MCP server "Test Server" is unreachable: timeout'], $tool->execute([]));
     }
 
     #[Test]
-    public function takesTheClassificationFromTheServerForKnownActionsOnly(): void
+    public function sendsTheServerInstructionsOnlyWithTheFirstToolUsedPerRequest(): void
+    {
+        $gate = new InstructionGate();
+        $first = $this->tool(self::QUERY_METRICS, null, $gate, 'Call list-domains first.');
+        $second = $this->tool(self::MARK_FIXED, null, $gate, 'Call list-domains first.');
+
+        self::assertSame('Call list-domains first.', $first->getInstructions());
+        self::assertSame('', $second->getInstructions());
+        self::assertSame('', $first->getInstructions());
+    }
+
+    #[Test]
+    public function takesTheClassificationForItsOwnRemoteTool(): void
     {
         $classification = [PiiClass::ANY => [PiiClass::PUBLIC]];
         $tool = new McpTool(
             new FakeMcpServer('test', null, [], $classification),
-            $this->createMock(Client::class),
-            self::REMOTE_TOOLS
+            $this->createStub(Client::class),
+            self::QUERY_METRICS,
+            new InstructionGate()
         );
 
-        self::assertSame($classification, $tool->getFieldClassification('query-metrics-tool'));
-        self::assertSame([], $tool->getFieldClassification('unknown'));
+        self::assertSame($classification, $tool->getFieldClassification(''));
     }
 
-    private function tool(string $instructions = '', ?Client $client = null): McpTool
-    {
-        return new McpTool(new FakeMcpServer(), $client ?? $this->createMock(Client::class), self::REMOTE_TOOLS, $instructions);
+    /**
+     * @param array<string, mixed> $remoteTool
+     */
+    private function tool(
+        array $remoteTool,
+        ?Client $client = null,
+        ?InstructionGate $gate = null,
+        string $instructions = ''
+    ): McpTool {
+        return new McpTool(
+            new FakeMcpServer(),
+            $client ?? $this->createStub(Client::class),
+            $remoteTool,
+            $gate ?? new InstructionGate(),
+            $instructions
+        );
     }
 }

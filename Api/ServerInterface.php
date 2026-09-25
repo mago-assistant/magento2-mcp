@@ -46,4 +46,9 @@ interface ServerInterface
      * @return array<string, array{0: string, 1?: string}>
      */
     public function getFieldClassification(string $toolName): array;
+
+    /**
+     * Extra guidance appended to an error a remote tool returned (e.g. "list the domains first"), or ''
+     */
+    public function getErrorHint(string $toolName, string $error): string;
 }
