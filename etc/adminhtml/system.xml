@@ -8,7 +8,7 @@
             <group id="custom" translate="label comment" type="text" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>MCP Server</label>
                 <comment><![CDATA[Let the assistant use the tools of a remote MCP server (Streamable HTTP). Run <code>bin/magento mago:mcp:tools --refresh</code> to check the connection. Each remote tool appears on the Skills page as <code>mcp_custom__&lt;tool&gt;</code>.]]></comment>
-                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
@@ -27,10 +27,88 @@
                         <field id="enabled">1</field>
                     </depends>
                 </field>
+                <field id="auth_type" translate="label comment" type="select" sortOrder="35" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Authentication</label>
+                    <source_model>MagoAssistant\Mcp\Model\Config\Source\AuthType</source_model>
+                    <comment><![CDATA[With OAuth every admin user connects their own account; a connection is never shared with other admin users.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
                 <field id="token" translate="label comment" type="obscure" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Bearer Token</label>
                     <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
                     <comment><![CDATA[Sent as <code>Authorization: Bearer</code> for every admin user. Leave empty for a server without authentication.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                        <field id="auth_type">bearer</field>
+                    </depends>
+                </field>
+                <field id="connection" translate="label" sortOrder="45" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Your Connection</label>
+                    <frontend_model>MagoAssistant\Mcp\Block\Adminhtml\System\Config\OAuthConnection</frontend_model>
+                    <attribute type="server_code">custom</attribute>
+                    <depends>
+                        <field id="enabled">1</field>
+                        <field id="auth_type">oauth</field>
+                    </depends>
+                </field>
+                <field id="allowed_tools" translate="label comment" type="text" sortOrder="50" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Allowed Tools</label>
+                    <comment><![CDATA[Comma-separated tool names. Empty allows every tool the server offers; fewer tools means fewer tokens per message.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="replaces_skill" translate="label comment" type="text" sortOrder="55" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Replaces Skill</label>
+                    <comment><![CDATA[Name of a Mago skill (e.g. <code>rumvision</code>) that is hidden for admin users who can use this server, so the assistant does not get the same data twice.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="output_public" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Output Contains No Personal Data</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[Only set to Yes when the server never returns personal data: its output then goes to the AI provider as-is. With No, the privacy filter strips every field and the tools return nothing useful.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="timeout" translate="label" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Timeout (seconds)</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+            <group id="rumvision" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>RUMvision MCP</label>
+                <comment><![CDATA[Core Web Vitals and real-user monitoring data from <a href="https://www.rumvision.com/help-center/apis/mcp/introduction/" target="_blank" rel="noopener">RUMvision</a>. Each admin user connects their own RUMvision account; MCP access must be enabled for your organisation and role in RUMvision. The tools appear as <code>mcp_rumvision__&lt;tool&gt;</code>.]]></comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="label" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Name</label>
+                    <comment><![CDATA[Shown to the AI as the source of these tools.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="url" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Server URL</label>
+                    <validate>validate-url</validate>
+                    <comment><![CDATA[The MCP endpoint, e.g. <code>https://example.com/mcp</code>.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="connection" translate="label" sortOrder="45" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Your Connection</label>
+                    <frontend_model>MagoAssistant\Mcp\Block\Adminhtml\System\Config\OAuthConnection</frontend_model>
+                    <attribute type="server_code">rumvision</attribute>
                     <depends>
                         <field id="enabled">1</field>
                     </depends>
@@ -42,7 +120,14 @@
                         <field id="enabled">1</field>
                     </depends>
                 </field>
-                <field id="output_public" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                <field id="replaces_skill" translate="label comment" type="text" sortOrder="55" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Replaces Skill</label>
+                    <comment><![CDATA[Name of a Mago skill (e.g. <code>rumvision</code>) that is hidden for admin users who can use this server, so the assistant does not get the same data twice.]]></comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="output_public" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Output Contains No Personal Data</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     <comment><![CDATA[Only set to Yes when the server never returns personal data: its output then goes to the AI provider as-is. With No, the privacy filter strips every field and the tools return nothing useful.]]></comment>
@@ -50,7 +135,7 @@
                         <field id="enabled">1</field>
                     </depends>
                 </field>
-                <field id="timeout" translate="label comment" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                <field id="timeout" translate="label" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Timeout (seconds)</label>
                     <validate>validate-digits validate-greater-than-zero</validate>
                     <depends>

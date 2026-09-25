@@ -27,4 +27,9 @@ class BearerTokenAuthenticator implements AuthenticatorInterface
     {
         return false;
     }
+
+    public function hasCredentials(?int $adminUserId): bool
+    {
+        return true;
+    }
 }

@@ -1,0 +1,33 @@
+{
+    "mago_mcp_oauth_client": {
+        "column": {
+            "server_code": true,
+            "server_url": true,
+            "redirect_uri": true,
+            "client_id": true,
+            "client_secret": true,
+            "metadata": true,
+            "created_at": true
+        },
+        "constraint": {
+            "PRIMARY": true
+        }
+    },
+    "mago_mcp_token": {
+        "column": {
+            "entity_id": true,
+            "admin_user_id": true,
+            "server_code": true,
+            "access_token": true,
+            "refresh_token": true,
+            "expires_at": true,
+            "scope": true,
+            "updated_at": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "MAGO_MCP_TOKEN_ADMIN_USER_ID_SERVER_CODE": true,
+            "MAGO_MCP_TOKEN_ADMIN_USER_ID_ADMIN_USER_USER_ID": true
+        }
+    }
+}

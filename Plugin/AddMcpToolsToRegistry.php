@@ -12,7 +12,8 @@ use MagoAssistant\Mcp\Service\ToolProvider;
 
 /**
  * Adds the MCP tools to Mago's registry. getTool() and getToolDefinitions() call these methods on
- * $this, which is the interceptor, so they see the MCP tools too.
+ * $this, which is the interceptor, so they see the MCP tools too. A tool is only offered to a user
+ * the server has credentials for, so one admin's OAuth connection never serves another.
  */
 class AddMcpToolsToRegistry
 {
@@ -44,8 +45,17 @@ class AddMcpToolsToRegistry
     public function afterGetEnabledTools(ToolRegistry $subject, array $result, ?int $adminUserId = null): array
     {
         foreach ($this->toolProvider->getTools() as $tool) {
-            if (!isset($result[$tool->getName()]) && $this->isAvailable($subject, $tool, $adminUserId)) {
-                $result[$tool->getName()] = $tool;
+            $server = $tool->getServer();
+            if (isset($result[$tool->getName()])
+                || !$server->getAuthenticator()->hasCredentials($adminUserId)
+                || !$this->isAvailable($subject, $tool, $adminUserId)
+            ) {
+                continue;
+            }
+            $result[$tool->getName()] = $tool;
+            // The MCP server is leading: the skill it replaces is dropped for this user only.
+            if ($server->getReplacesSkill() !== '') {
+                unset($result[$server->getReplacesSkill()]);
             }
         }
         return $result;
