@@ -58,14 +58,53 @@ final class McpJsonSourceTest extends TestCase
 
         $servers = $this->source()->discover();
 
-        self::assertCount(2, $servers);
+        self::assertCount(3, $servers);
         self::assertSame('widget', $servers[0]->name, 'the magento- prefix is stripped like the Composer name');
         self::assertSame(['php', 'bin/x-mcp'], $servers[0]->command);
         self::assertSame('/app', $servers[0]->cwd);
         self::assertSame(DiscoveredServer::SOURCE_MCP_JSON, $servers[0]->source);
         self::assertSame(['node', 'srv.js'], $servers[1]->command);
         self::assertSame(['K' => 'v'], $servers[1]->env);
+        self::assertSame('http', $servers[2]->transport);
         self::assertSame([], $this->log->entries);
+    }
+
+    #[Test]
+    public function anHttpEntryWithABearerHeaderBecomesABearerRow(): void
+    {
+        file_put_contents($this->root . '/.mcp.json', json_encode(['mcpServers' => [
+            'Remote Thing' => [
+                'type' => 'http',
+                'url' => 'https://example.test/mcp',
+                'headers' => ['Authorization' => 'Bearer s3cret', 'X-Other' => 'x'],
+            ],
+            'plain-url' => ['url' => 'https://plain.test/mcp'],
+            'streamable' => ['type' => 'streamable-http', 'url' => 'https://s.test/mcp'],
+        ]]));
+
+        $servers = $this->source()->discover();
+
+        self::assertSame(['remote_thing', 'plain_url', 'streamable'], array_map(static fn ($s) => $s->name, $servers));
+        self::assertSame('http', $servers[0]->transport);
+        self::assertSame([], $servers[0]->command);
+        self::assertSame('https://example.test/mcp', $servers[0]->url);
+        self::assertSame('bearer', $servers[0]->authType);
+        self::assertSame('s3cret', $servers[0]->bearerToken);
+        self::assertSame('none', $servers[1]->authType);
+        self::assertSame('', $servers[1]->bearerToken);
+        self::assertStringContainsString('X-Other', $this->log->messages(), 'an unsupported header is logged');
+        self::assertStringNotContainsString('s3cret', $this->log->messages(), 'the token itself is never logged');
+    }
+
+    #[Test]
+    public function anSseEntryIsSkippedAndLogged(): void
+    {
+        file_put_contents($this->root . '/.mcp.json', json_encode(['mcpServers' => [
+            'old' => ['type' => 'sse', 'url' => 'https://example.test/sse'],
+        ]]));
+
+        self::assertSame([], $this->source()->discover());
+        self::assertStringContainsString('sse', $this->log->messages());
     }
 
     #[Test]
