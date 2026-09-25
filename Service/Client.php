@@ -156,7 +156,7 @@ class Client
         if ($response['status'] === 401) {
             throw new McpAuthenticationException(sprintf(
                 'MCP server "%s" rejected the credentials (401). Connect or reconnect it under Stores > '
-                . 'Configuration > Mago Assistant > General.',
+                . 'Configuration > Mago Assistant > MCP Servers.',
                 $server->getLabel()
             ));
         }

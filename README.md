@@ -49,7 +49,7 @@ encrypted in `mago_mcp_token`.
 
 ### RUMvision
 
-**Stores > Configuration > Mago Assistant > General > RUMvision MCP**: enable, save, then **Connect RUMvision** and log
+**Stores > Configuration > Mago Assistant > MCP Servers > RUMvision MCP**: enable, save, then **Connect RUMvision** and log
 in with your RUMvision account. MCP access must be enabled for your organisation and role in RUMvision
 ([docs](https://www.rumvision.com/help-center/apis/mcp/enable-access/)). The data you see is what your RUMvision account
 may see. `who-am-i-tool` output has name and e-mail stripped before it reaches the AI provider.

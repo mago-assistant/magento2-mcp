@@ -52,6 +52,6 @@ class Callback extends Action implements HttpGetActionInterface
 
         /** @var Redirect $redirect */
         $redirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
-        return $redirect->setPath('adminhtml/system_config/edit', ['section' => 'mago']);
+        return $redirect->setPath('adminhtml/system_config/edit', ['section' => 'mago_mcp']);
     }
 }

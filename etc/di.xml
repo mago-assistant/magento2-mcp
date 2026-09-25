@@ -17,7 +17,7 @@
     <virtualType name="MagoAssistant\Mcp\Service\Server\Rumvision" type="MagoAssistant\Mcp\Service\ConfiguredServer">
         <arguments>
             <argument name="code" xsi:type="string">rumvision</argument>
-            <argument name="configPath" xsi:type="string">mago/mcp_rumvision</argument>
+            <argument name="configPath" xsi:type="string">mago_mcp/rumvision</argument>
             <argument name="classificationOverrides" xsi:type="array">
                 <!-- Everything else is performance data; this one returns the connected user's identity -->
                 <item name="who-am-i-tool" xsi:type="array">

@@ -8,9 +8,7 @@
                 <timeout>20</timeout>
                 <output_public>0</output_public>
             </custom>
-        </mago_mcp>
-        <mago>
-            <mcp_rumvision>
+            <rumvision>
                 <enabled>0</enabled>
                 <label>RUMvision</label>
                 <url>https://insights.rumvision.com/mcp</url>
@@ -20,7 +18,7 @@
                 <replaces_skill>rumvision</replaces_skill>
                 <output_public>1</output_public>
                 <timeout>30</timeout>
-            </mcp_rumvision>
-        </mago>
+            </rumvision>
+        </mago_mcp>
     </default>
 </config>

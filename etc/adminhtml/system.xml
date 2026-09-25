@@ -83,9 +83,7 @@
                     </depends>
                 </field>
             </group>
-        </section>
-        <section id="mago">
-            <group id="mcp_rumvision" translate="label comment" type="text" sortOrder="38" showInDefault="1" showInWebsite="0" showInStore="0">
+            <group id="rumvision" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>RUMvision MCP</label>
                 <comment><![CDATA[Core Web Vitals and real-user monitoring data from <a href="https://www.rumvision.com/help-center/apis/mcp/introduction/" target="_blank" rel="noopener">RUMvision</a>. Each admin user connects their own RUMvision account; MCP access must be enabled for your organisation and role in RUMvision. The tools appear as <code>mcp_rumvision__&lt;tool&gt;</code>.]]></comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">

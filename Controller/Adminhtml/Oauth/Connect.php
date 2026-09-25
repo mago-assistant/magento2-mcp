@@ -38,7 +38,7 @@ class Connect extends Action implements HttpGetActionInterface
             return $redirect->setUrl($url);
         } catch (OAuthException $e) {
             $this->messageManager->addErrorMessage(__('Could not connect: %1', $e->getMessage()));
-            return $redirect->setPath('adminhtml/system_config/edit', ['section' => 'mago']);
+            return $redirect->setPath('adminhtml/system_config/edit', ['section' => 'mago_mcp']);
         }
     }
 }
