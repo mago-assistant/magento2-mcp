@@ -23,7 +23,7 @@ use MagoAssistant\Mcp\Service\Transport\TransportResolver;
 class ToolCatalog
 {
     private const CACHE_PREFIX = 'mago_mcp_tools_';
-    private const FAILURE_LIFETIME = 60;
+    private const FAILURE_LIFETIME = 300;
 
     /** @var array<string,array{tools: array<int,array<string,mixed>>, instructions: string}>|null per-request memo */
     private ?array $memo = null;
@@ -265,7 +265,8 @@ class ToolCatalog
         if (is_string($cached) && $cached !== '') {
             $decoded = json_decode($cached, true);
             if (is_array($decoded) && array_key_exists('error', $decoded)) {
-                // A recent failure: do not spawn the server again for every request while it is down.
+                // A recent failure: the chat panel lists tools on every admin page load, so a down server
+                // costs one attempt per five minutes, never one per page.
                 return $this->memo[$name] = ['tools' => [], 'instructions' => ''];
             }
             if (is_array($decoded) && isset($decoded['tools'])) {

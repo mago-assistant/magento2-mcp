@@ -13,6 +13,8 @@ final class FakeCache implements FrontendInterface
     /** @var array<string,string> */
     public array $store = [];
     public int $saves = 0;
+    /** @var array<string,int|null> last lifetime saved per id */
+    public array $lifetimes = [];
 
     public function test($identifier)
     {
@@ -33,6 +35,7 @@ final class FakeCache implements FrontendInterface
         $this->assertId($identifier);
         $this->store[$identifier] = (string)$data;
         $this->saves++;
+        $this->lifetimes[$identifier] = $lifeTime === null ? null : (int)$lifeTime;
 
         return true;
     }

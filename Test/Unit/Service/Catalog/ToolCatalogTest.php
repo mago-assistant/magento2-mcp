@@ -214,7 +214,7 @@ final class ToolCatalogTest extends TestCase
     }
 
     #[Test]
-    public function aFailedToolListIsNotRetriedForAMinute(): void
+    public function aFailedToolListIsNotRetriedForFiveMinutes(): void
     {
         $this->servers->add('broken', true);
         $this->transport->failures['broken'] = 'exited early';
@@ -225,6 +225,7 @@ final class ToolCatalogTest extends TestCase
         self::assertSame(1, $this->transport->listCalls, 'the failure is cached briefly');
         self::assertArrayHasKey('mago_mcp_tools_broken', $this->cache->store);
         self::assertSame('exited early', $this->servers->rows['broken']['last_error']);
+        self::assertSame(300, $this->cache->lifetimes['mago_mcp_tools_broken'], 'a down server costs one attempt per five minutes');
     }
 
     #[Test]
