@@ -58,7 +58,7 @@ final class ComposerSourceTest extends TestCase
         $servers = $this->source()->discover();
 
         self::assertCount(1, $servers);
-        self::assertSame('acme-shipping', $servers[0]->name);
+        self::assertSame('acme_shipping', $servers[0]->name);
         self::assertSame(['php', 'vendor/acme/shipping/bin/serve'], $servers[0]->command);
         self::assertSame(['ACME' => '1'], $servers[0]->env);
         self::assertSame(DiscoveredServer::SOURCE_COMPOSER, $servers[0]->source);
