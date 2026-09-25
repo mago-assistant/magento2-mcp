@@ -18,6 +18,7 @@ use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeTransport;
+use MagoAssistant\Mcp\Test\Unit\Fakes\ThrowingTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
 use PHPUnit\Framework\Attributes\Test;
@@ -280,6 +281,20 @@ final class ToolCatalogTest extends TestCase
 
         self::assertSame(['*' => ['public'], 'email' => ['strip']], $entries['customer-get']->fieldClassification);
         self::assertNull($entries['product-list']->fieldClassification, 'no override: the server-wide rule applies');
+    }
+
+    #[Test]
+    public function anyThrowableFromATransportIsThatServersFailureOnly(): void
+    {
+        $this->servers->add('demo', true);
+        $this->servers->add('remote', true, 'manual', ['transport' => 'http', 'command' => []]);
+        $catalog = $this->catalog(true, ['stdio' => $this->transport, 'http' => new ThrowingTransport()]);
+
+        $entries = $catalog->entries();
+
+        self::assertSame(['demo'], array_unique(array_map(static fn ($e) => $e->server, $entries)));
+        self::assertStringContainsString('malformed response', (string)$this->servers->rows['remote']['last_error']);
+        self::assertArrayHasKey('mago_mcp_tools_remote', $this->cache->store);
     }
 
     #[Test]

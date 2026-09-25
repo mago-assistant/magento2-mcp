@@ -7,7 +7,17 @@
         <arguments>
             <argument name="transports" xsi:type="array">
                 <item name="stdio" xsi:type="object">MagoAssistant\Mcp\Service\Transport\StdioTransport</item>
+                <!-- A proxy: the Symfony client is built only when an http server is actually used. -->
+                <item name="http" xsi:type="object">MagoAssistant\Mcp\Service\Transport\HttpTransport\Proxy</item>
             </argument>
+        </arguments>
+    </type>
+
+    <!-- The one place a Symfony HTTP client is chosen; HttpTransport takes the interface, tests pass MockHttpClient. -->
+    <virtualType name="MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient" type="Symfony\Component\HttpClient\CurlHttpClient"/>
+    <type name="MagoAssistant\Mcp\Service\Transport\HttpTransport">
+        <arguments>
+            <argument name="httpClient" xsi:type="object">MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient</argument>
         </arguments>
     </type>
 
@@ -22,55 +32,15 @@
     </type>
 
     <!--
-        Servers a module ships. Any module adds one by registering a ServerDefinition virtual type here;
-        the module's own PHP never names a vendor server.
+        Servers a module ships: register a ServerDefinition virtual type as an item of "definitions"
+        (name, label, transport, url or command, authType, allowedTools, timeout, outputPublic,
+        replacesSkill, fieldClassificationOverrides, errorHints). This module ships none of its own.
     -->
     <type name="MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry">
         <arguments>
-            <argument name="definitions" xsi:type="array">
-                <item name="rumvision" xsi:type="object">MagoAssistant\Mcp\Server\Rumvision</item>
-            </argument>
+            <argument name="definitions" xsi:type="array"/>
         </arguments>
     </type>
-    <virtualType name="MagoAssistant\Mcp\Server\Rumvision" type="MagoAssistant\Mcp\Service\Discovery\ServerDefinition">
-        <arguments>
-            <argument name="name" xsi:type="string">rumvision</argument>
-            <argument name="label" xsi:type="string">RUMvision</argument>
-            <argument name="transport" xsi:type="string">http</argument>
-            <argument name="url" xsi:type="string">https://insights.rumvision.com/mcp</argument>
-            <argument name="authType" xsi:type="string">oauth</argument>
-            <argument name="timeout" xsi:type="number">30</argument>
-            <argument name="outputPublic" xsi:type="boolean">true</argument>
-            <argument name="replacesSkill" xsi:type="string">rumvision</argument>
-            <!-- Leaves out who-am-i, the help-center tools and share-conversation-summary, which sends the conversation to RUMvision -->
-            <argument name="allowedTools" xsi:type="array">
-                <item name="0" xsi:type="string">list-domains-tool</item>
-                <item name="1" xsi:type="string">describe-catalog-tool</item>
-                <item name="2" xsi:type="string">get-diagnosis-guide-tool</item>
-                <item name="3" xsi:type="string">list-template-rules-tool</item>
-                <item name="4" xsi:type="string">query-metrics-tool</item>
-                <item name="5" xsi:type="string">query-metric-crosstab-tool</item>
-                <item name="6" xsi:type="string">query-timeline-tool</item>
-                <item name="7" xsi:type="string">get-top-issues-tool</item>
-                <item name="8" xsi:type="string">get-health-checks-tool</item>
-                <item name="9" xsi:type="string">get-issues-tool</item>
-                <item name="10" xsi:type="string">get-ai-analyses-tool</item>
-                <item name="11" xsi:type="string">mark-issue-fixed-tool</item>
-                <item name="12" xsi:type="string">get-dashboard-link-tool</item>
-            </argument>
-            <!-- Everything else is performance data; this one returns the connected user's identity -->
-            <argument name="fieldClassificationOverrides" xsi:type="array">
-                <item name="who-am-i-tool" xsi:type="array">
-                    <item name="*" xsi:type="array"><item name="0" xsi:type="string">public</item></item>
-                    <item name="name" xsi:type="array"><item name="0" xsi:type="string">strip</item></item>
-                    <item name="email" xsi:type="array"><item name="0" xsi:type="string">strip</item></item>
-                </item>
-            </argument>
-            <argument name="errorHints" xsi:type="array">
-                <item name="This domain does not exist" xsi:type="string">Call mcp_rumvision__list_domains_tool for the exact domain names (e.g. "shop.nl", not "shop.com") and retry with one of them.</item>
-            </argument>
-        </arguments>
-    </virtualType>
 
     <type name="MagoAssistant\Mcp\Service\Catalog\ToolCatalog">
         <arguments>

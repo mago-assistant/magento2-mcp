@@ -12,7 +12,7 @@ use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Model\Cache\Type\McpTools;
 use MagoAssistant\Mcp\Model\Config;
 use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
-use MagoAssistant\Mcp\Service\Mcp\McpException;
+use MagoAssistant\Mcp\Service\Mcp\McpAuthenticationException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
 
@@ -253,8 +253,8 @@ class ToolCatalog
 
     /**
      * The server's tools/list and initialize extras, from the per-request memo, then the cache, then
-     * the server. A failure caches nothing and is recorded on the row so the admin page can show it;
-     * other servers are unaffected.
+     * the server. A failure is cached for five minutes and recorded on the row so the admin page can
+     * show it; other servers are unaffected.
      *
      * @param array<string,mixed> $row
      * @return array{tools: array<int,array<string,mixed>>, instructions: string}
@@ -283,8 +283,13 @@ class ToolCatalog
         try {
             $server = ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitions->get($name));
             $result = $this->transports->for($server)->listTools($server);
-        } catch (McpException $e) {
+        } catch (\Throwable $e) {
+            // Any failure, including one a transport forgot to wrap, is this server's alone.
             $this->errorLogger->addLog('MCP tools/list', ['server' => $name, 'error' => $e->getMessage()]);
+            if ($e instanceof McpAuthenticationException) {
+                // Not cached and not on the row: the next admin may be the one who is connected.
+                return $this->memo[$name] = ['tools' => [], 'instructions' => ''];
+            }
             $this->servers->setLastError($name, $e->getMessage());
             $this->cache->save(
                 json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
@@ -310,7 +315,7 @@ class ToolCatalog
     }
 
     /**
-     * Magento's cache frontend accepts only [A-Za-z0-9_] in ids; server names may contain "-".
+     * Magento's cache frontend accepts only [A-Za-z0-9_] in ids; names are already that, this only guards.
      */
     private function cacheId(string $name): string
     {
