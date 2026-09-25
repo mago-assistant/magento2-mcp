@@ -4,17 +4,22 @@
  */
 declare(strict_types=1);
 
-namespace MagoAssistant\Mcp\Service\Mcp;
+namespace MagoAssistant\Mcp\Service\Transport;
 
-use MagoAssistant\Mcp\Api\McpClientInterface;
+use MagoAssistant\Mcp\Api\TransportInterface;
+use MagoAssistant\Mcp\Service\Mcp\McpException;
+use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
+use MagoAssistant\Mcp\Service\Mcp\StdioSession;
+use MagoAssistant\Mcp\Service\Mcp\StdioSessionFactory;
 
 /**
  * Spawns the server for every request: initialize, initialized, the request, close.
  *
  * A server that boots the application on start costs a second or two per call; the catalog caches tools/list so
- * only real tool calls pay it. Persistent processes are out of scope for version 1.
+ * only real tool calls pay it. Persistent processes are out of scope for version 1. A stdio process has no
+ * per-user identity, so $adminUserId is ignored.
  */
-class StdioClient implements McpClientInterface
+class StdioTransport implements TransportInterface
 {
     public const PROTOCOL_VERSION = '2025-06-18';
 
@@ -25,9 +30,9 @@ class StdioClient implements McpClientInterface
     {
     }
 
-    public function listTools(ServerConfig $server, int $timeoutSeconds): array
+    public function listTools(ServerConfig $server, ?int $adminUserId = null): array
     {
-        [$session, $initialized] = $this->open($server, $timeoutSeconds);
+        [$session, $initialized] = $this->open($server);
         try {
             $tools = [];
             $cursor = null;
@@ -51,9 +56,9 @@ class StdioClient implements McpClientInterface
         }
     }
 
-    public function callTool(ServerConfig $server, string $tool, array $arguments, int $timeoutSeconds): array
+    public function callTool(ServerConfig $server, string $tool, array $arguments, ?int $adminUserId = null): array
     {
-        [$session] = $this->open($server, $timeoutSeconds);
+        [$session] = $this->open($server);
         try {
             return $session->request('tools/call', [
                 'name' => $tool,
@@ -67,9 +72,9 @@ class StdioClient implements McpClientInterface
     /**
      * @return array{0: StdioSession, 1: array<string,mixed>} the open session and the initialize result
      */
-    private function open(ServerConfig $server, int $timeoutSeconds): array
+    private function open(ServerConfig $server): array
     {
-        $session = $this->sessionFactory->create($server, $timeoutSeconds);
+        $session = $this->sessionFactory->create($server, $server->timeout);
         $session->start();
         try {
             $initialized = $session->request('initialize', [

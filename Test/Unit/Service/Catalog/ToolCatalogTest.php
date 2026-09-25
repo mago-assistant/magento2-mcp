@@ -14,7 +14,8 @@ use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
-use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpClient;
+use MagoAssistant\Mcp\Service\Transport\TransportResolver;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
 use PHPUnit\Framework\Attributes\Test;
@@ -23,17 +24,17 @@ use PHPUnit\Framework\TestCase;
 final class ToolCatalogTest extends TestCase
 {
     private FakeServerRepository $servers;
-    private FakeMcpClient $client;
+    private FakeTransport $transport;
     private FakeCache $cache;
     private FakeLogger $log;
 
     protected function setUp(): void
     {
         $this->servers = new FakeServerRepository();
-        $this->client = new FakeMcpClient();
+        $this->transport = new FakeTransport();
         $this->cache = new FakeCache();
         $this->log = new FakeLogger();
-        $this->client->tools['demo'] = [
+        $this->transport->tools['demo'] = [
             ['name' => 'product-list', 'description' => 'List products. More detail here.', 'inputSchema' => ['type' => 'object', 'properties' => []]],
             ['name' => 'product-delete', 'description' => 'Delete a product.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'code-runner', 'description' => 'Run PHP.', 'inputSchema' => ['type' => 'object']],
@@ -55,7 +56,7 @@ final class ToolCatalogTest extends TestCase
 
         return new ToolCatalog(
             $this->servers,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             $this->cache,
             $config,
             new ModeClassifier(),
@@ -68,7 +69,7 @@ final class ToolCatalogTest extends TestCase
     {
         $this->servers->add('demo', true);
         $this->servers->add('off', false);
-        $this->client->tools['off'] = [['name' => 'x-get', 'description' => '', 'inputSchema' => []]];
+        $this->transport->tools['off'] = [['name' => 'x-get', 'description' => '', 'inputSchema' => []]];
 
         $names = array_map(static fn ($e) => $e->tool, $this->catalog()->entries());
 
@@ -144,7 +145,7 @@ final class ToolCatalogTest extends TestCase
     #[Test]
     public function nestedEmptyObjectsStayObjectsAndListsStayLists(): void
     {
-        $this->client->tools['demo'] = [[
+        $this->transport->tools['demo'] = [[
             'name' => 'product-list',
             'description' => 'List products.',
             'inputSchema' => [
@@ -173,18 +174,18 @@ final class ToolCatalogTest extends TestCase
 
         $catalog->entries();
         $catalog->entries();
-        self::assertSame(1, $this->client->listCalls);
+        self::assertSame(1, $this->transport->listCalls);
 
         $catalog->refresh('demo');
         $catalog->entries();
-        self::assertSame(2, $this->client->listCalls);
+        self::assertSame(2, $this->transport->listCalls);
     }
 
     #[Test]
     public function cacheIdsAreSafeForMagentoCache(): void
     {
         $this->servers->add('magento-demo', true);
-        $this->client->tools['magento-demo'] = $this->client->tools['demo'];
+        $this->transport->tools['magento-demo'] = $this->transport->tools['demo'];
 
         $catalog = $this->catalog();
         $catalog->entries();
@@ -199,8 +200,8 @@ final class ToolCatalogTest extends TestCase
         $this->servers->add('demo', true);
         $this->servers->add('broken', true);
         $this->servers->add('off', false);
-        $this->client->tools['off'] = [['name' => 'x-get', 'description' => '', 'inputSchema' => []]];
-        $this->client->failures['broken'] = 'exited early';
+        $this->transport->tools['off'] = [['name' => 'x-get', 'description' => '', 'inputSchema' => []]];
+        $this->transport->failures['broken'] = 'exited early';
 
         $entries = $this->catalog()->entries();
 
@@ -216,14 +217,31 @@ final class ToolCatalogTest extends TestCase
     public function aFailedToolListIsNotRetriedForAMinute(): void
     {
         $this->servers->add('broken', true);
-        $this->client->failures['broken'] = 'exited early';
+        $this->transport->failures['broken'] = 'exited early';
 
         $this->catalog()->entries();
         $this->catalog()->entries();
 
-        self::assertSame(1, $this->client->listCalls, 'the failure is cached briefly');
+        self::assertSame(1, $this->transport->listCalls, 'the failure is cached briefly');
         self::assertArrayHasKey('mago_mcp_tools_broken', $this->cache->store);
         self::assertSame('exited early', $this->servers->rows['broken']['last_error']);
+    }
+
+    #[Test]
+    public function anUnknownTransportIsAFailureOfThatServerOnly(): void
+    {
+        $this->servers->add('demo', true);
+        $this->servers->add('remote', true, 'manual', ['transport' => 'http', 'command' => []]);
+
+        $entries = $this->catalog()->entries();
+
+        self::assertSame(['demo'], array_unique(array_map(static fn ($e) => $e->server, $entries)));
+        self::assertStringContainsString(
+            'uses transport "http", which is not available',
+            (string)$this->servers->rows['remote']['last_error']
+        );
+        self::assertArrayHasKey('mago_mcp_tools_remote', $this->cache->store, 'the failure is cached like any other');
+        self::assertSame(1, $this->transport->listCalls, 'the stdio transport was asked once, for demo');
     }
 
     #[Test]
@@ -242,7 +260,7 @@ final class ToolCatalogTest extends TestCase
     public function keepsServerInstructionsForEnabledServers(): void
     {
         $this->servers->add('demo', true);
-        $this->client->instructions['demo'] = 'Prefer SKUs over ids.';
+        $this->transport->instructions['demo'] = 'Prefer SKUs over ids.';
 
         self::assertSame(['demo' => 'Prefer SKUs over ids.'], $this->catalog()->serverInstructions());
     }
@@ -258,7 +276,7 @@ final class ToolCatalogTest extends TestCase
     #[Test]
     public function aReadToolIsNeverIrreversibleEvenWithAnIrreversibleWordInItsName(): void
     {
-        $this->client->tools['demo'][] = ['name' => 'creditmemo-list', 'description' => '', 'inputSchema' => ['type' => 'object']];
+        $this->transport->tools['demo'][] = ['name' => 'creditmemo-list', 'description' => '', 'inputSchema' => ['type' => 'object']];
         $this->servers->add('demo', true);
 
         $all = $this->catalog()->entriesForServer('demo');
@@ -271,7 +289,7 @@ final class ToolCatalogTest extends TestCase
     #[Test]
     public function readOnlyHintFalseAloneMakesAWriteThatIsNotIrreversible(): void
     {
-        $this->client->tools['demo'][] = ['name' => 'price-get', 'description' => 'Named like a read.',
+        $this->transport->tools['demo'][] = ['name' => 'price-get', 'description' => 'Named like a read.',
             'inputSchema' => ['type' => 'object'], 'annotations' => ['readOnlyHint' => false]];
         $this->servers->add('demo', true);
 
@@ -286,7 +304,7 @@ final class ToolCatalogTest extends TestCase
     #[Test]
     public function destructiveHintTightensAReadNameToWrite(): void
     {
-        $this->client->tools['demo'] = [
+        $this->transport->tools['demo'] = [
             ['name' => 'log-get', 'description' => '', 'inputSchema' => ['type' => 'object'],
                 'annotations' => ['destructiveHint' => true]],
             ['name' => 'audit-get', 'description' => '', 'inputSchema' => ['type' => 'object'],

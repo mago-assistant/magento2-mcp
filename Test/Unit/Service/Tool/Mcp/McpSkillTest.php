@@ -19,7 +19,8 @@ use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Service\Tool\Mcp\McpSkill;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
-use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpClient;
+use MagoAssistant\Mcp\Service\Transport\TransportResolver;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakePermissionChecker;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
@@ -29,16 +30,16 @@ use PHPUnit\Framework\TestCase;
 final class McpSkillTest extends TestCase
 {
     private FakeServerRepository $servers;
-    private FakeMcpClient $client;
+    private FakeTransport $transport;
     private FakeLogger $log;
     private int $maxChars = 16000;
 
     protected function setUp(): void
     {
         $this->servers = new FakeServerRepository();
-        $this->client = new FakeMcpClient();
+        $this->transport = new FakeTransport();
         $this->log = new FakeLogger();
-        $this->client->tools['demo'] = [
+        $this->transport->tools['demo'] = [
             ['name' => 'product-list', 'description' => 'List products with filters. Supports paging.',
                 'inputSchema' => ['type' => 'object', 'properties' => ['limit' => ['type' => 'integer'], 'sku' => ['type' => 'string']], 'required' => ['limit']]],
             ['name' => 'product-delete', 'description' => 'Delete a product by SKU.',
@@ -62,7 +63,7 @@ final class McpSkillTest extends TestCase
         $magoConfig->method('isDebugEnabled')->willReturn(true);
         $catalog = new ToolCatalog(
             $this->servers,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             new FakeCache(),
             $config,
             new ModeClassifier(),
@@ -70,7 +71,7 @@ final class McpSkillTest extends TestCase
         );
         $executor = new Executor(
             $catalog,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             $config,
             new DebugLogger($this->log, $json),
             new ErrorLogger($this->log, $json),
@@ -106,7 +107,7 @@ final class McpSkillTest extends TestCase
     #[Test]
     public function aSchemaWithoutPropertiesHasNoPropertiesKey(): void
     {
-        $this->client->tools['demo'][] = ['name' => 'cache-flush', 'description' => 'Flush.',
+        $this->transport->tools['demo'][] = ['name' => 'cache-flush', 'description' => 'Flush.',
             'inputSchema' => ['type' => 'object', 'properties' => [], 'required' => []]];
 
         $bare = $this->skill('code-runner')->getParameterSchema();
@@ -121,7 +122,7 @@ final class McpSkillTest extends TestCase
     #[Test]
     public function propertyEntriesAreArraysAndDeeperEmptyObjectsStayObjects(): void
     {
-        $this->client->tools['demo'][] = [
+        $this->transport->tools['demo'][] = [
             'name' => 'tag-list',
             'description' => 'List tags.',
             'inputSchema' => [
@@ -174,7 +175,8 @@ final class McpSkillTest extends TestCase
         self::assertNull($skill->findRefusal(['limit' => 1, '_admin_user_id' => 7]));
         $skill->execute(['limit' => 1, '_admin_user_id' => 7]);
 
-        self::assertSame(['demo', 'product-list', ['limit' => 1]], $this->client->calls[0]);
+        self::assertSame(['demo', 'product-list', ['limit' => 1]], $this->transport->calls[0]);
+        self::assertSame([7], $this->transport->adminUserIds, 'the admin id reaches the transport, not the server arguments');
         self::assertStringContainsString('"argument_keys":["limit"]', $this->log->messages());
         self::assertStringNotContainsString('_admin_user_id', $this->log->messages());
     }
@@ -201,7 +203,7 @@ final class McpSkillTest extends TestCase
     {
         $this->skill('code-runner')->execute([]);
 
-        self::assertSame(['demo', 'code-runner', []], $this->client->calls[0], 'no hidden state stops a write');
+        self::assertSame(['demo', 'code-runner', []], $this->transport->calls[0], 'no hidden state stops a write');
     }
 
     #[Test]
@@ -217,7 +219,7 @@ final class McpSkillTest extends TestCase
         self::assertStringContainsString('Invalid arguments for demo__product-delete', $missing['error']);
         self::assertStringContainsString('missing required argument "sku"', $missing['error']);
         self::assertStringContainsString('"required":["sku"]', $missing['error']);
-        self::assertSame([], $this->client->calls, 'a refusal never reaches the server');
+        self::assertSame([], $this->transport->calls, 'a refusal never reaches the server');
     }
 
     #[Test]
@@ -225,18 +227,18 @@ final class McpSkillTest extends TestCase
     {
         $this->skill('product-list')->execute(['limit' => '3', 'sku' => '42']);
 
-        self::assertSame(['demo', 'product-list', ['limit' => 3, 'sku' => '42']], $this->client->calls[0], 'integer coerced, string left alone');
+        self::assertSame(['demo', 'product-list', ['limit' => 3, 'sku' => '42']], $this->transport->calls[0], 'integer coerced, string left alone');
         self::assertStringContainsString('"limit" must be integer', $this->skill('product-list')->execute(['limit' => 'five'])['error']);
     }
 
     #[Test]
     public function executesAndShapesTheResult(): void
     {
-        $this->client->nextResult = ['content' => [['type' => 'text', 'text' => 'one'], ['type' => 'text', 'text' => 'two']], 'isError' => false];
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => 'one'], ['type' => 'text', 'text' => 'two']], 'isError' => false];
 
         $result = $this->skill('product-list')->execute(['limit' => 5, 'sku' => 'SECRET-SKU']);
 
-        self::assertSame(['demo', 'product-list', ['limit' => 5, 'sku' => 'SECRET-SKU']], $this->client->calls[0]);
+        self::assertSame(['demo', 'product-list', ['limit' => 5, 'sku' => 'SECRET-SKU']], $this->transport->calls[0]);
         self::assertSame(['server' => 'demo', 'action' => 'product-list', 'content' => "one\n\ntwo", 'is_error' => false], $result);
         $logged = $this->log->messages();
         self::assertStringContainsString('MCP call', $logged);
@@ -249,7 +251,7 @@ final class McpSkillTest extends TestCase
     public function isErrorAndTruncationAreReported(): void
     {
         $this->maxChars = 10;
-        $this->client->nextResult = ['content' => [['type' => 'text', 'text' => str_repeat('x', 25)]], 'isError' => true];
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => str_repeat('x', 25)]], 'isError' => true];
 
         $result = $this->skill('product-list')->execute(['limit' => 1]);
 
@@ -260,7 +262,7 @@ final class McpSkillTest extends TestCase
     #[Test]
     public function resultWithoutTextBlocksSaysSo(): void
     {
-        $this->client->nextResult = ['content' => [['type' => 'image', 'data' => 'AAAA', 'mimeType' => 'image/png']], 'isError' => false];
+        $this->transport->nextResult = ['content' => [['type' => 'image', 'data' => 'AAAA', 'mimeType' => 'image/png']], 'isError' => false];
 
         $result = $this->skill('product-list')->execute(['limit' => 1]);
 

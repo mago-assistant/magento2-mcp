@@ -4,7 +4,7 @@
  */
 declare(strict_types=1);
 
-namespace MagoAssistant\Mcp\Test\Unit\Service\Mcp;
+namespace MagoAssistant\Mcp\Test\Unit\Service\Transport;
 
 use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Serialize\Serializer\Json;
@@ -14,16 +14,16 @@ use MagoAssistant\Mcp\Service\Mcp\McpException;
 use MagoAssistant\Mcp\Service\Mcp\McpProcessException;
 use MagoAssistant\Mcp\Service\Mcp\McpTimeoutException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
-use MagoAssistant\Mcp\Service\Mcp\StdioClient;
+use MagoAssistant\Mcp\Service\Transport\StdioTransport;
 use MagoAssistant\Mcp\Service\Mcp\StdioSessionFactory;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\PhpExecutableFinder;
 
-final class StdioClientTest extends TestCase
+final class StdioTransportTest extends TestCase
 {
-    private StdioClient $client;
+    private StdioTransport $client;
     private FakeLogger $log;
     private StdioSessionFactory $factory;
 
@@ -38,12 +38,12 @@ final class StdioClientTest extends TestCase
             $magoConfig,
             new PhpExecutableFinder()
         );
-        $this->client = new StdioClient($this->factory);
+        $this->client = new StdioTransport($this->factory);
     }
 
-    private function server(array $env = []): ServerConfig
+    private function server(array $env = [], int $timeout = 10): ServerConfig
     {
-        return new ServerConfig('fake', [PHP_BINARY, dirname(__DIR__, 2) . '/Fakes/fake-mcp-server.php'], $env);
+        return new ServerConfig('fake', [PHP_BINARY, dirname(__DIR__, 2) . '/Fakes/fake-mcp-server.php'], $env, timeout: $timeout);
     }
 
     /**
@@ -64,7 +64,7 @@ final class StdioClientTest extends TestCase
     #[Test]
     public function listToolsFollowsPaginationAndKeepsServerInfoAndInstructions(): void
     {
-        $result = $this->client->listTools($this->server(['FAKE_MCP_INSTRUCTIONS' => 'Be brief.']), 10);
+        $result = $this->client->listTools($this->server(['FAKE_MCP_INSTRUCTIONS' => 'Be brief.']));
 
         self::assertSame(['echo-args', 'item-delete', 'slow-get', 'image-get', 'weather', 'stock-get'], array_column($result['tools'], 'name'));
         self::assertSame(['text'], $result['tools'][0]['inputSchema']['required']);
@@ -75,13 +75,13 @@ final class StdioClientTest extends TestCase
     #[Test]
     public function instructionsDefaultToEmptyString(): void
     {
-        self::assertSame('', $this->client->listTools($this->server(), 10)['instructions']);
+        self::assertSame('', $this->client->listTools($this->server())['instructions']);
     }
 
     #[Test]
     public function callToolReturnsContentAndAnswersServerPingAndSkipsNotifications(): void
     {
-        $result = $this->client->callTool($this->server(), 'echo-args', ['text' => 'hi'], 10);
+        $result = $this->client->callTool($this->server(), 'echo-args', ['text' => 'hi']);
 
         self::assertFalse($result['isError']);
         self::assertSame('{"text":"hi"}', $result['content'][0]['text']);
@@ -93,13 +93,13 @@ final class StdioClientTest extends TestCase
         $this->expectException(McpException::class);
         $this->expectExceptionMessage('Unknown tool: nope');
 
-        $this->client->callTool($this->server(), 'nope', [], 10);
+        $this->client->callTool($this->server(), 'nope', []);
     }
 
     #[Test]
     public function isErrorResultPassesThrough(): void
     {
-        $result = $this->client->callTool($this->server(), 'item-delete', ['id' => 1], 10);
+        $result = $this->client->callTool($this->server(), 'item-delete', ['id' => 1]);
 
         self::assertTrue($result['isError']);
         self::assertSame('Item not found', $result['content'][0]['text']);
@@ -110,7 +110,7 @@ final class StdioClientTest extends TestCase
     {
         $start = microtime(true);
         try {
-            $this->client->callTool($this->server(), 'slow-get', [], 1);
+            $this->client->callTool($this->server(timeout: 1), 'slow-get', []);
             self::fail('expected timeout');
         } catch (McpTimeoutException $e) {
             self::assertStringContainsString('timed out after 1 s', $e->getMessage());
@@ -123,7 +123,7 @@ final class StdioClientTest extends TestCase
     public function crashBeforeAnswerReportsStderr(): void
     {
         try {
-            $this->client->listTools($this->server(['FAKE_MCP_CRASH' => '1']), 10);
+            $this->client->listTools($this->server(['FAKE_MCP_CRASH' => '1']));
             self::fail('expected process error');
         } catch (McpProcessException $e) {
             self::assertStringContainsString('boom', $e->getMessage());
@@ -136,14 +136,14 @@ final class StdioClientTest extends TestCase
     {
         $this->expectException(McpProcessException::class);
 
-        $this->client->listTools(new ServerConfig('gone', ['/nonexistent/mcp-binary']), 5);
+        $this->client->listTools(new ServerConfig('gone', ['/nonexistent/mcp-binary'], timeout: 5));
     }
 
     #[Test]
     public function rejectsUnsupportedProtocolVersion(): void
     {
         try {
-            $this->client->listTools($this->server(['FAKE_MCP_VERSION' => '2099-01-01']), 10);
+            $this->client->listTools($this->server(['FAKE_MCP_VERSION' => '2099-01-01']));
             self::fail('expected version rejection');
         } catch (McpException $e) {
             self::assertStringContainsString('2099-01-01', $e->getMessage());
@@ -154,7 +154,7 @@ final class StdioClientTest extends TestCase
     #[Test]
     public function acceptsOlderSupportedProtocolVersion(): void
     {
-        self::assertCount(6, $this->client->listTools($this->server(['FAKE_MCP_VERSION' => '2025-03-26']), 10)['tools']);
+        self::assertCount(6, $this->client->listTools($this->server(['FAKE_MCP_VERSION' => '2025-03-26']))['tools']);
     }
 
     #[Test]
@@ -170,9 +170,9 @@ final class StdioClientTest extends TestCase
     #[Test]
     public function handshakeFailureClosesTheProcess(): void
     {
-        $sleeper = new ServerConfig('sleeper', ['sleep', '8']);
+        $sleeper = new ServerConfig('sleeper', ['sleep', '8'], timeout: 1);
         try {
-            $this->client->listTools($sleeper, 1);
+            $this->client->listTools($sleeper);
             self::fail('expected timeout');
         } catch (McpTimeoutException) {
         }

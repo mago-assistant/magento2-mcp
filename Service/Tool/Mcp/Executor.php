@@ -9,11 +9,11 @@ namespace MagoAssistant\Mcp\Service\Tool\Mcp;
 use MagoAssistant\Mago\Api\Config\RepositoryInterface as MagoConfig;
 use MagoAssistant\Mago\Logger\DebugLogger;
 use MagoAssistant\Mago\Logger\ErrorLogger;
-use MagoAssistant\Mcp\Api\McpClientInterface;
 use MagoAssistant\Mcp\Model\Config;
 use MagoAssistant\Mcp\Service\Catalog\CatalogEntry;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Mcp\McpException;
+use MagoAssistant\Mcp\Service\Transport\TransportResolver;
 
 /**
  * Runs one MCP tool for a skill: argument decoding, coercion and validation, the call itself, and the
@@ -23,7 +23,7 @@ class Executor
 {
     public function __construct(
         private readonly ToolCatalog $catalog,
-        private readonly McpClientInterface $client,
+        private readonly TransportResolver $transports,
         private readonly Config $config,
         private readonly DebugLogger $debugLogger,
         private readonly ErrorLogger $errorLogger,
@@ -54,7 +54,7 @@ class Executor
      * @param array<string,mixed> $arguments already passed problemWith()
      * @return array{server:string,action:string,content:string,is_error:bool}|array{error:string}
      */
-    public function run(CatalogEntry $entry, array $arguments): array
+    public function run(CatalogEntry $entry, array $arguments, ?int $adminUserId = null): array
     {
         $server = $this->catalog->serverConfig($entry->server);
         if ($server === null) {
@@ -64,7 +64,7 @@ class Executor
         // Keys only: Mago rehydrates privacy tokens before execute(), so the values here are real.
         $this->debug('MCP call', ['skill' => $skill, 'argument_keys' => array_keys($arguments)]);
         try {
-            $result = $this->client->callTool($server, $entry->tool, $arguments, $this->config->getProcessTimeout());
+            $result = $this->transports->for($server)->callTool($server, $entry->tool, $arguments, $adminUserId);
         } catch (McpException $e) {
             $this->errorLogger->addLog('MCP call failed', ['skill' => $skill, 'error' => $e->getMessage()]);
 

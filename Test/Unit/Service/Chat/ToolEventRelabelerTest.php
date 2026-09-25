@@ -18,7 +18,8 @@ use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
-use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpClient;
+use MagoAssistant\Mcp\Service\Transport\TransportResolver;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
 use MagoAssistant\Mcp\Test\Unit\Fakes\ThrowingSkillRegistry;
@@ -40,9 +41,9 @@ final class ToolEventRelabelerTest extends TestCase
     private function registry(): SkillRegistry
     {
         $servers = new FakeServerRepository();
-        $client = new FakeMcpClient();
+        $transport = new FakeTransport();
         $log = new FakeLogger();
-        $client->tools['demo'] = [
+        $transport->tools['demo'] = [
             ['name' => 'product-list', 'description' => 'List products.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'code-runner', 'description' => 'Run PHP.', 'inputSchema' => ['type' => 'object']],
         ];
@@ -55,10 +56,17 @@ final class ToolEventRelabelerTest extends TestCase
         ]));
         $json = new Json();
         $errorLogger = new ErrorLogger($log, $json);
-        $catalog = new ToolCatalog($servers, $client, new FakeCache(), $config, new ModeClassifier(), $errorLogger);
+        $catalog = new ToolCatalog(
+            $servers,
+            new TransportResolver(['stdio' => $transport]),
+            new FakeCache(),
+            $config,
+            new ModeClassifier(),
+            $errorLogger
+        );
         $executor = new Executor(
             $catalog,
-            $client,
+            new TransportResolver(['stdio' => $transport]),
             $config,
             new DebugLogger($log, $json),
             $errorLogger,

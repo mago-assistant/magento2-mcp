@@ -18,7 +18,8 @@ use MagoAssistant\Mcp\Service\Tool\Mcp\McpSkill;
 use MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
-use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpClient;
+use MagoAssistant\Mcp\Service\Transport\TransportResolver;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
 use PHPUnit\Framework\Attributes\Test;
@@ -27,20 +28,20 @@ use PHPUnit\Framework\TestCase;
 final class SkillRegistryTest extends TestCase
 {
     private FakeServerRepository $servers;
-    private FakeMcpClient $client;
+    private FakeTransport $transport;
     private FakeLogger $log;
 
     protected function setUp(): void
     {
         $this->servers = new FakeServerRepository();
-        $this->client = new FakeMcpClient();
+        $this->transport = new FakeTransport();
         $this->log = new FakeLogger();
-        $this->client->tools['demo'] = [
+        $this->transport->tools['demo'] = [
             ['name' => 'product-list', 'description' => 'List products.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'product-delete', 'description' => 'Delete a product.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'code-runner', 'description' => 'Run PHP.', 'inputSchema' => ['type' => 'object']],
         ];
-        $this->client->tools['acme'] = [
+        $this->transport->tools['acme'] = [
             ['name' => 'order-list', 'description' => 'List orders.', 'inputSchema' => ['type' => 'object']],
         ];
         $this->servers->add('demo', true);
@@ -59,7 +60,7 @@ final class SkillRegistryTest extends TestCase
         $errorLogger = new ErrorLogger($this->log, $json);
         $catalog = new ToolCatalog(
             $this->servers,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             new FakeCache(),
             $config,
             new ModeClassifier(),
@@ -67,7 +68,7 @@ final class SkillRegistryTest extends TestCase
         );
         $executor = new Executor(
             $catalog,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             $config,
             new DebugLogger($this->log, $json),
             $errorLogger,
@@ -126,14 +127,14 @@ final class SkillRegistryTest extends TestCase
         $registry->byName('demo__product-list');
         $registry->isMcpSkill('nope');
 
-        self::assertSame(1, $this->client->listCalls, 'one listing for the one enabled server');
+        self::assertSame(1, $this->transport->listCalls, 'one listing for the one enabled server');
         self::assertSame($first[0], $registry->all()[0], 'the same skill objects are returned');
     }
 
     #[Test]
     public function serverInstructionsReachTheSkills(): void
     {
-        $this->client->instructions['demo'] = 'Use SKUs, not ids.';
+        $this->transport->instructions['demo'] = 'Use SKUs, not ids.';
 
         $skill = $this->registry()->byName('demo__product-list');
 
@@ -143,7 +144,7 @@ final class SkillRegistryTest extends TestCase
     #[Test]
     public function aNameCollisionKeepsTheFirstSkillAndLogsIt(): void
     {
-        $this->client->tools['demo'] = [
+        $this->transport->tools['demo'] = [
             ['name' => 'a.b', 'description' => 'First.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'a:b', 'description' => 'Second.', 'inputSchema' => ['type' => 'object']],
         ];
@@ -169,7 +170,7 @@ final class SkillRegistryTest extends TestCase
     public function aSkillWhoseNameProvidersRejectIsLeftOutAndLogged(): void
     {
         $long = str_repeat('x', 70);
-        $this->client->tools['demo'][] = [
+        $this->transport->tools['demo'][] = [
             'name' => $long,
             'description' => 'Too long.',
             'inputSchema' => ['type' => 'object'],

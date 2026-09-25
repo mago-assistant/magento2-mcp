@@ -2,7 +2,14 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
     <preference for="MagoAssistant\Mcp\Api\ServerRepositoryInterface" type="MagoAssistant\Mcp\Model\Server\Repository"/>
-    <preference for="MagoAssistant\Mcp\Api\McpClientInterface" type="MagoAssistant\Mcp\Service\Mcp\StdioClient"/>
+
+    <type name="MagoAssistant\Mcp\Service\Transport\TransportResolver">
+        <arguments>
+            <argument name="transports" xsi:type="array">
+                <item name="stdio" xsi:type="object">MagoAssistant\Mcp\Service\Transport\StdioTransport</item>
+            </argument>
+        </arguments>
+    </type>
 
     <type name="MagoAssistant\Mcp\Service\Discovery\ServerScanner">
         <arguments>

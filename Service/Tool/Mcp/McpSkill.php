@@ -116,10 +116,17 @@ class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingTo
 
     public function execute(array $params): array
     {
+        // Mago's own key, read before the "_" keys are stripped: an http transport needs it for
+        // per-admin credentials; a stdio transport ignores it.
+        $adminUserId = isset($params['_admin_user_id']) && (int)$params['_admin_user_id'] > 0
+            ? (int)$params['_admin_user_id']
+            : null;
+
         return $this->findRefusal($params)
             ?? $this->executor->run(
                 $this->entry,
-                $this->executor->arguments($this->entry, $this->toolArguments($params))
+                $this->executor->arguments($this->entry, $this->toolArguments($params)),
+                $adminUserId
             );
     }
 

@@ -17,7 +17,8 @@ use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
-use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpClient;
+use MagoAssistant\Mcp\Service\Transport\TransportResolver;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
 use PHPUnit\Framework\Attributes\Test;
@@ -26,13 +27,13 @@ use PHPUnit\Framework\TestCase;
 final class ExecutorTest extends TestCase
 {
     private FakeServerRepository $servers;
-    private FakeMcpClient $client;
+    private FakeTransport $transport;
     private FakeLogger $log;
 
     protected function setUp(): void
     {
         $this->servers = new FakeServerRepository();
-        $this->client = new FakeMcpClient();
+        $this->transport = new FakeTransport();
         $this->log = new FakeLogger();
     }
 
@@ -49,7 +50,7 @@ final class ExecutorTest extends TestCase
         $magoConfig->method('isDebugEnabled')->willReturn(false);
         $catalog = new ToolCatalog(
             $this->servers,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             new FakeCache(),
             $config,
             new ModeClassifier(),
@@ -58,7 +59,7 @@ final class ExecutorTest extends TestCase
 
         return new Executor(
             $catalog,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             $config,
             new DebugLogger($this->log, $json),
             new ErrorLogger($this->log, $json),
@@ -145,14 +146,14 @@ final class ExecutorTest extends TestCase
         $result = $this->executor()->run($this->entry(), ['sku' => 'A']);
 
         self::assertStringContainsString('MCP server "demo" is not enabled', $result['error']);
-        self::assertSame([], $this->client->calls);
+        self::assertSame([], $this->transport->calls);
     }
 
     #[Test]
     public function runLogsAndReturnsAServerFailure(): void
     {
         $this->servers->add('demo', true);
-        $this->client->failures['demo:stock-set'] = 'server exploded';
+        $this->transport->failures['demo:stock-set'] = 'server exploded';
 
         $result = $this->executor()->run($this->entry(), ['sku' => 'A']);
 

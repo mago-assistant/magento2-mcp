@@ -23,7 +23,8 @@ use MagoAssistant\Mcp\Test\Unit\Fakes\FakeAuthorization;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMagoTool;
-use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpClient;
+use MagoAssistant\Mcp\Service\Transport\TransportResolver;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakePermissionChecker;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
@@ -35,17 +36,17 @@ use PHPUnit\Framework\TestCase;
 final class ToolRegistryMcpSkillsTest extends TestCase
 {
     private FakeServerRepository $servers;
-    private FakeMcpClient $client;
+    private FakeTransport $transport;
     private FakeLogger $log;
     private FakeMagoTool $magoTool;
 
     protected function setUp(): void
     {
         $this->servers = new FakeServerRepository();
-        $this->client = new FakeMcpClient();
+        $this->transport = new FakeTransport();
         $this->log = new FakeLogger();
         $this->magoTool = new FakeMagoTool();
-        $this->client->tools['demo'] = [
+        $this->transport->tools['demo'] = [
             ['name' => 'product-list', 'description' => 'List products.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'product-delete', 'description' => 'Delete a product.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'code-runner', 'description' => 'Run PHP.', 'inputSchema' => ['type' => 'object']],
@@ -68,7 +69,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
         ]));
         $catalog = new ToolCatalog(
             $this->servers,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             new FakeCache(),
             $config,
             new ModeClassifier(),
@@ -76,7 +77,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
         );
         $executor = new Executor(
             $catalog,
-            $this->client,
+            new TransportResolver(['stdio' => $this->transport]),
             $config,
             new DebugLogger($this->log, new Json()),
             $this->errorLogger(),

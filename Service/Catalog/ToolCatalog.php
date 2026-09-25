@@ -8,12 +8,12 @@ namespace MagoAssistant\Mcp\Service\Catalog;
 
 use Magento\Framework\Cache\FrontendInterface;
 use MagoAssistant\Mago\Logger\ErrorLogger;
-use MagoAssistant\Mcp\Api\McpClientInterface;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Model\Cache\Type\McpTools;
 use MagoAssistant\Mcp\Model\Config;
 use MagoAssistant\Mcp\Service\Mcp\McpException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
+use MagoAssistant\Mcp\Service\Transport\TransportResolver;
 
 /**
  * What the model may call: every enabled server's tools/list, cached, with a read/write mode from the
@@ -36,7 +36,7 @@ class ToolCatalog
 
     public function __construct(
         private readonly ServerRepositoryInterface $servers,
-        private readonly McpClientInterface $client,
+        private readonly TransportResolver $transports,
         private readonly FrontendInterface $cache,
         private readonly Config $config,
         private readonly ModeClassifier $classifier,
@@ -77,7 +77,9 @@ class ToolCatalog
     {
         $row = $this->servers->getByName($name);
 
-        return $row !== null && $row['enabled'] ? ServerConfig::fromRow($row, $this->config->getProcessTimeout()) : null;
+        return $row !== null && $row['enabled']
+            ? ServerConfig::fromRow($row, $this->config->getProcessTimeout())
+            : null;
     }
 
     /**
@@ -272,8 +274,8 @@ class ToolCatalog
             }
         }
         try {
-            $timeout = $this->config->getProcessTimeout();
-            $result = $this->client->listTools(ServerConfig::fromRow($row, $timeout), $timeout);
+            $server = ServerConfig::fromRow($row, $this->config->getProcessTimeout());
+            $result = $this->transports->for($server)->listTools($server);
         } catch (McpException $e) {
             $this->errorLogger->addLog('MCP tools/list', ['server' => $name, 'error' => $e->getMessage()]);
             $this->servers->setLastError($name, $e->getMessage());
