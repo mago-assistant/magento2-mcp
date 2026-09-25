@@ -291,8 +291,9 @@ class ToolCatalog
         } catch (\Throwable $e) {
             // Any failure, including one a transport forgot to wrap, is this server's alone.
             $this->errorLogger->addLog('MCP tools/list', ['server' => $name, 'error' => $e->getMessage()]);
-            if ($e instanceof McpAuthenticationException) {
-                // Not cached and not on the row: the next admin may be the one who is connected.
+            if ($e instanceof McpAuthenticationException && $server->authType === ServerConfig::AUTH_OAUTH) {
+                // Per-admin credentials: not cached and not on the row, the next admin may be the
+                // connected one. A rejected static token is an ordinary failure, cached and shown.
                 return $this->memo[$name] = ['tools' => [], 'instructions' => ''];
             }
             $this->servers->setLastError($name, $e->getMessage());

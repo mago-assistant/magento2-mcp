@@ -37,13 +37,15 @@ final class DiscoveredServer
     }
 
     /**
-     * The storable columns, in the decoded shape ServerRepositoryInterface::save() accepts.
+     * The storable columns, in the decoded shape ServerRepositoryInterface::save() accepts. The bearer
+     * token is present only when the source supplied one, so a rescan never wipes a token stored on the
+     * row by other means.
      *
      * @return array<string,mixed>
      */
     public function toRow(): array
     {
-        return [
+        $row = [
             'name' => $this->name,
             'command' => $this->command,
             'env' => $this->env,
@@ -53,12 +55,16 @@ final class DiscoveredServer
             'transport' => $this->transport,
             'url' => $this->url,
             'auth_type' => $this->authType,
-            'bearer_token' => $this->bearerToken,
             'allowed_tools' => $this->allowedTools,
             'timeout' => $this->timeout,
             'output_public' => $this->outputPublic,
             'replaces_skill' => $this->replacesSkill,
         ];
+        if ($this->bearerToken !== '') {
+            $row['bearer_token'] = $this->bearerToken;
+        }
+
+        return $row;
     }
 
     private const NAME_PREFIXES = ['magento2_', 'magento_', 'module_'];

@@ -19,6 +19,7 @@ use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\ThrowingTransport;
+use MagoAssistant\Mcp\Test\Unit\Fakes\UnauthorizedTransport;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
 use PHPUnit\Framework\Attributes\Test;
@@ -305,6 +306,33 @@ final class ToolCatalogTest extends TestCase
         $tools = array_map(static fn ($e) => $e->tool, $this->catalog()->entries());
 
         self::assertSame(['product-list'], $tools);
+    }
+
+    #[Test]
+    public function aRejectedBearerTokenIsACachedFailureShownOnTheRow(): void
+    {
+        $this->servers->add('remote', true, 'mcp_json', ['transport' => 'http', 'auth_type' => 'bearer', 'command' => []]);
+        $http = new UnauthorizedTransport();
+        $catalog = $this->catalog(true, ['stdio' => $this->transport, 'http' => $http]);
+
+        $catalog->entries();
+        $catalog->entries();
+
+        self::assertSame(1, $http->calls, 'a wrong static token is not retried on every page load');
+        self::assertStringContainsString('rejected the credentials', (string)$this->servers->rows['remote']['last_error']);
+        self::assertArrayHasKey('mago_mcp_tools_remote', $this->cache->store);
+    }
+
+    #[Test]
+    public function anOauthServersMissingConnectionIsNeitherCachedNorShownOnTheRow(): void
+    {
+        $this->servers->add('remote', true, 'module', ['transport' => 'http', 'auth_type' => 'oauth', 'command' => []]);
+        $http = new UnauthorizedTransport();
+
+        $this->catalog(true, ['stdio' => $this->transport, 'http' => $http])->entries();
+
+        self::assertNull($this->servers->rows['remote']['last_error'], 'the next admin may be the connected one');
+        self::assertArrayNotHasKey('mago_mcp_tools_remote', $this->cache->store);
     }
 
     #[Test]
