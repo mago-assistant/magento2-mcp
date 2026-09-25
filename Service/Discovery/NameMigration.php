@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MagoAssistant\Mcp\Service\Discovery;
 
 /**
- * What to do with rows stored under a name an earlier version normalised differently ("n98-magerun2",
+ * What to do with rows stored under a name an earlier version normalised differently ("acme-tools",
  * "magento_widget"): every lookup normalises the name it is given, so such a row can neither be called
  * nor disabled, and a rescan would insert its twin. Each row is renamed to today's form; where two rows
  * land on one name, an enabled row wins, then the one already carrying the name, then the first.

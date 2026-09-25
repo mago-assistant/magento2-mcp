@@ -17,7 +17,7 @@ final class DiscoveredServerTest extends TestCase
     {
         self::assertSame('my_server', DiscoveredServer::normaliseName('my-server'));
         self::assertSame('my_server', DiscoveredServer::normaliseName('my_server'));
-        self::assertSame('n98_magerun2', DiscoveredServer::normaliseName('n98-magerun2'));
+        self::assertSame('acme_tools2', DiscoveredServer::normaliseName('acme-tools2'));
         self::assertSame('widget', DiscoveredServer::normaliseName('Magento Widget'));
         self::assertSame('weird', DiscoveredServer::normaliseName('--weird--'));
         self::assertMatchesRegularExpression('/^[a-z0-9_]+$/', DiscoveredServer::normaliseName('A.B:C/D-E'));

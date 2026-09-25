@@ -45,9 +45,6 @@
         "phpunit/phpunit": "^10.5 || ^11.0 || ^12.0",
         "psr/log": "^1.1 || ^2.0 || ^3.0"
     },
-    "suggest": {
-        "inchoo/magento-bricklayer": "An MCP server with catalog, order and system tools; discovered and exposed as Mago skills automatically"
-    },
     "autoload": {
         "files": [
             "registration.php"

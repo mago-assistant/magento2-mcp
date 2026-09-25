@@ -23,7 +23,7 @@ final class NameMigrationTest extends TestCase
     #[Test]
     public function cleanRowsNeedNothing(): void
     {
-        $plan = NameMigration::plan([$this->row('bricklayer', true), $this->row('magerun', false)]);
+        $plan = NameMigration::plan([$this->row('acme', true), $this->row('widget', false)]);
 
         self::assertSame(['rename' => [], 'delete' => []], $plan);
     }
@@ -31,9 +31,9 @@ final class NameMigrationTest extends TestCase
     #[Test]
     public function aLegacyHyphenNameIsRenamed(): void
     {
-        $plan = NameMigration::plan([$this->row('n98-magerun2', true), $this->row('magento_widget', false)]);
+        $plan = NameMigration::plan([$this->row('acme-tools2', true), $this->row('magento_widget', false)]);
 
-        self::assertSame(['n98-magerun2' => 'n98_magerun2', 'magento_widget' => 'widget'], $plan['rename']);
+        self::assertSame(['acme-tools2' => 'acme_tools2', 'magento_widget' => 'widget'], $plan['rename']);
         self::assertSame([], $plan['delete']);
     }
 

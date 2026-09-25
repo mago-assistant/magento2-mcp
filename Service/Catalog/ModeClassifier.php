@@ -13,10 +13,10 @@ namespace MagoAssistant\Mcp\Service\Catalog;
  * MCP servers may annotate tools with readOnlyHint, but many do not, and a wrong "read" would
  * skip Mago's confirmation card. So a write word anywhere in the name wins. Otherwise the name is read
  * only when it starts or ends with a read verb ("get-product", "product-get") or ends with a read noun
- * ("route-info"). A read word anywhere else does not count, so a name like "log-wipe" fails closed to
- * write even though "wipe" is on no list: the write list never has to be complete to be safe, because an
- * unrecognised name is a write. The read-noun rule is the exception to that: "wipe-log" ends in the read
- * noun "log", so it classifies read even though "wipe" is an unknown verb. That one case is why the
+ * ("route-info"). A read word anywhere else does not count, so a name like "log-rotate" fails closed to
+ * write even though "rotate" is on no list: the write list never has to be complete to be safe, because an
+ * unrecognised name is a write. The read-noun rule is the exception to that: "rotate-log" ends in the read
+ * noun "log", so it classifies read even though "rotate" is an unknown verb. That one case is why the
  * README asks an administrator to review a new server's read tools rather than trust the classifier
  * alone.
  */
