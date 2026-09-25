@@ -86,10 +86,10 @@ final class ToolEventRelabelerTest extends TestCase
     {
         $wrapped = $this->relabeler()->wrap($this->recorder());
 
-        $wrapped('tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Running demo__product-list...']);
+        $wrapped('tool_status', ['name' => 'mcp_demo__product_list', 'status' => 'running', 'message' => 'Running mcp_demo__product_list___']);
 
         self::assertSame(
-            [['tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Listing product...']]],
+            [['tool_status', ['name' => 'mcp_demo__product_list', 'status' => 'running', 'message' => 'Listing product...']]],
             $this->emitted
         );
     }
@@ -99,7 +99,7 @@ final class ToolEventRelabelerTest extends TestCase
     {
         $wrapped = $this->relabeler()->wrap($this->recorder());
 
-        $wrapped('tool_status', ['name' => 'demo__code-runner', 'status' => 'running', 'message' => 'Running demo__code-runner...']);
+        $wrapped('tool_status', ['name' => 'mcp_demo__code_runner', 'status' => 'running', 'message' => 'Running mcp_demo__code_runner___']);
 
         self::assertSame('Running code runner...', $this->emitted[0][1]['message']);
     }
@@ -122,10 +122,10 @@ final class ToolEventRelabelerTest extends TestCase
     {
         $wrapped = $this->relabeler()->wrap($this->recorder());
 
-        $wrapped('tool_call', ['id' => 'c1', 'name' => 'demo__product-list', 'input' => ['sku' => 'A']]);
+        $wrapped('tool_call', ['id' => 'c1', 'name' => 'mcp_demo__product_list', 'input' => ['sku' => 'A']]);
 
         self::assertSame(
-            [['tool_call', ['id' => 'c1', 'name' => 'demo__product-list', 'input' => ['sku' => 'A']]]],
+            [['tool_call', ['id' => 'c1', 'name' => 'mcp_demo__product_list', 'input' => ['sku' => 'A']]]],
             $this->emitted
         );
     }
@@ -135,7 +135,7 @@ final class ToolEventRelabelerTest extends TestCase
     {
         $wrapped = $this->relabeler()->wrap($this->recorder());
 
-        $wrapped('tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Almost there...']);
+        $wrapped('tool_status', ['name' => 'mcp_demo__product_list', 'status' => 'running', 'message' => 'Almost there...']);
 
         self::assertSame('Almost there...', $this->emitted[0][1]['message']);
     }
@@ -145,10 +145,10 @@ final class ToolEventRelabelerTest extends TestCase
     {
         $wrapped = $this->relabeler()->wrap($this->recorder());
 
-        $wrapped('tool_status', ['name' => 'demo__product-list', 'status' => 'done', 'duration_ms' => 12]);
+        $wrapped('tool_status', ['name' => 'mcp_demo__product_list', 'status' => 'done', 'duration_ms' => 12]);
 
         self::assertSame(
-            [['tool_status', ['name' => 'demo__product-list', 'status' => 'done', 'duration_ms' => 12]]],
+            [['tool_status', ['name' => 'mcp_demo__product_list', 'status' => 'done', 'duration_ms' => 12]]],
             $this->emitted
         );
     }
@@ -158,12 +158,12 @@ final class ToolEventRelabelerTest extends TestCase
     {
         $wrapped = (new ToolEventRelabeler(new ThrowingSkillRegistry()))->wrap($this->recorder());
 
-        $wrapped('tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Running demo__product-list...']);
+        $wrapped('tool_status', ['name' => 'mcp_demo__product_list', 'status' => 'running', 'message' => 'Running mcp_demo__product_list___']);
         $wrapped('tool_status', ['name' => 'sales_data', 'status' => 'running', 'message' => 'Running sales_data...']);
 
         self::assertSame(
             [
-                ['tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Running demo__product-list...']],
+                ['tool_status', ['name' => 'mcp_demo__product_list', 'status' => 'running', 'message' => 'Running mcp_demo__product_list___']],
                 ['tool_status', ['name' => 'sales_data', 'status' => 'running', 'message' => 'Running sales_data...']],
             ],
             $this->emitted

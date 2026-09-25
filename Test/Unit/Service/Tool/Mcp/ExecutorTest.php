@@ -159,6 +159,6 @@ final class ExecutorTest extends TestCase
 
         self::assertSame(['error' => 'server exploded'], $result);
         self::assertStringContainsString('server exploded', $this->log->messages());
-        self::assertStringContainsString('demo__stock-set', $this->log->messages());
+        self::assertStringContainsString('mcp_demo__stock_set', $this->log->messages());
     }
 }

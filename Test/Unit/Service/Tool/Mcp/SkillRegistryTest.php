@@ -92,8 +92,8 @@ final class SkillRegistryTest extends TestCase
     {
         $names = self::names($this->registry()->all());
 
-        self::assertSame(['demo__product-list', 'demo__product-delete', 'demo__code-runner'], $names);
-        self::assertNotContains('acme__order-list', $names, 'a disabled server has no skills');
+        self::assertSame(['mcp_demo__product_list', 'mcp_demo__product_delete', 'mcp_demo__code_runner'], $names);
+        self::assertNotContains('mcp_acme__order_list', $names, 'a disabled server has no skills');
     }
 
     #[Test]
@@ -101,10 +101,10 @@ final class SkillRegistryTest extends TestCase
     {
         $registry = $this->registry();
 
-        self::assertInstanceOf(McpSkill::class, $registry->byName('demo__code-runner'));
-        self::assertInstanceOf(McpSkill::class, $registry->byName('demo__product-list'));
+        self::assertInstanceOf(McpSkill::class, $registry->byName('mcp_demo__code_runner'));
+        self::assertInstanceOf(McpSkill::class, $registry->byName('mcp_demo__product_list'));
         self::assertNull($registry->byName('sales_data'));
-        self::assertTrue($registry->isMcpSkill('demo__product-delete'));
+        self::assertTrue($registry->isMcpSkill('mcp_demo__product_delete'));
         self::assertFalse($registry->isMcpSkill('sales_data'));
     }
 
@@ -113,8 +113,8 @@ final class SkillRegistryTest extends TestCase
     {
         $registry = $this->registry();
 
-        self::assertStringEndsWith(' [runs code, SQL or commands]', (string)$registry->byName('demo__code-runner')?->getDescription());
-        self::assertStringNotContainsString('[runs code', (string)$registry->byName('demo__product-delete')?->getDescription());
+        self::assertStringEndsWith(' [runs code, SQL or commands]', (string)$registry->byName('mcp_demo__code_runner')?->getDescription());
+        self::assertStringNotContainsString('[runs code', (string)$registry->byName('mcp_demo__product_delete')?->getDescription());
     }
 
     #[Test]
@@ -124,7 +124,7 @@ final class SkillRegistryTest extends TestCase
 
         $first = $registry->all();
         $registry->all();
-        $registry->byName('demo__product-list');
+        $registry->byName('mcp_demo__product_list');
         $registry->isMcpSkill('nope');
 
         self::assertSame(1, $this->transport->listCalls, 'one listing for the one enabled server');
@@ -136,7 +136,7 @@ final class SkillRegistryTest extends TestCase
     {
         $this->transport->instructions['demo'] = 'Use SKUs, not ids.';
 
-        $skill = $this->registry()->byName('demo__product-list');
+        $skill = $this->registry()->byName('mcp_demo__product_list');
 
         self::assertStringContainsString('Use SKUs, not ids.', (string)$skill?->getInstructions());
     }
@@ -153,21 +153,21 @@ final class SkillRegistryTest extends TestCase
         $skills = $registry->all();
         $registry->all();
 
-        self::assertSame(['demo__a-b'], self::names($skills));
-        self::assertSame('a.b', $registry->byName('demo__a-b')?->entry()->tool);
+        self::assertSame(['mcp_demo__a_b'], self::names($skills));
+        self::assertSame('a.b', $registry->byName('mcp_demo__a_b')?->entry()->tool);
         $collisions = array_filter(
             $this->log->entries,
             static fn (array $e): bool => str_contains($e[1], 'MCP skill name collision')
         );
         self::assertCount(1, $collisions, 'logged once, not per call');
         $message = (string)array_values($collisions)[0][1];
-        self::assertStringContainsString('"name":"demo__a-b"', $message);
+        self::assertStringContainsString('"name":"mcp_demo__a_b"', $message);
         self::assertStringContainsString('"server":"demo"', $message);
         self::assertStringContainsString('"tool":"a:b"', $message);
     }
 
     #[Test]
-    public function aSkillWhoseNameProvidersRejectIsLeftOutAndLogged(): void
+    public function aLongToolNameIsHashedNotDropped(): void
     {
         $long = str_repeat('x', 70);
         $this->transport->tools['demo'][] = [
@@ -178,17 +178,15 @@ final class SkillRegistryTest extends TestCase
         $registry = $this->registry();
 
         $names = self::names($registry->all());
-        $registry->all();
 
-        self::assertSame(['demo__product-list', 'demo__product-delete', 'demo__code-runner'], $names);
-        self::assertNull($registry->byName('demo__' . $long));
+        self::assertContains(McpSkill::nameFor('demo', $long), $names, 'a long tool name is hashed, not dropped');
+        self::assertSame(64, strlen(McpSkill::nameFor('demo', $long)));
+        self::assertNotNull($registry->byName(McpSkill::nameFor('demo', $long)));
+        self::assertSame($long, $registry->byName(McpSkill::nameFor('demo', $long))?->entry()->tool);
         $unusable = array_filter(
             $this->log->entries,
             static fn (array $e): bool => str_contains($e[1], 'MCP skill name unusable')
         );
-        self::assertCount(1, $unusable, 'logged once per request');
-        $message = (string)array_values($unusable)[0][1];
-        self::assertStringContainsString('"server":"demo"', $message);
-        self::assertStringContainsString('"tool":"' . $long . '"', $message);
+        self::assertCount(0, $unusable);
     }
 }

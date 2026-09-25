@@ -14,7 +14,7 @@ use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
  * Every tool of every enabled server as one Mago skill, built once per request.
  * Two tools whose names sanitise to the same skill name (for example "a.b" and "a:b") cannot both be
  * skills: the first one wins and the collision is logged, without inventing a suffix. A name AI providers
- * reject (anything but 1 to 64 of [A-Za-z0-9_-]) is left out and logged as well.
+ * reject (anything but [A-Za-z0-9_-]) is left out and logged; nameFor() keeps every name within 64 characters.
  */
 class SkillRegistry
 {

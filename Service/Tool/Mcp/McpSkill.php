@@ -15,14 +15,15 @@ use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 
 /**
  * One MCP tool as one Mago skill, so it sits in Skills & Permissions beside Mago's own skills with
- * its own per-user permission. The name is "<server>__<tool>" because AI providers accept only
- * letters, digits, "_" and "-" in tool names. Its type (read or write) comes from the catalog entry;
+ * its own per-user permission. The name is "mcp_<server>__<tool>" (see nameFor()). Its type (read or write) comes from the catalog entry;
  * who may use it is Mago's role ACL and per-user permission, as for any other skill. The description
  * carries "[personal data]" and "[runs code, SQL or commands]" when the tool's name says so.
  */
 class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingToolInterface
 {
+    public const PREFIX = 'mcp_';
     public const SEPARATOR = '__';
+    private const MAX_NAME_LENGTH = 64;
     private const DESCRIPTION_LENGTH = 300;
     private const SERVER_INSTRUCTIONS_LENGTH = 2000;
 
@@ -34,11 +35,21 @@ class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingTo
     ) {
     }
 
+    /**
+     * mcp_<server>__<tool>, lower-case and [a-z0-9_] only: AI providers accept only letters, digits,
+     * "_" and "-" in a tool name, and one of them caps it at 64 characters. Over the cap the name is
+     * cut to 55 and suffixed with "_" and 8 hex characters of its own SHA-256, so two long names
+     * stay distinct. This is the only place a skill name is built.
+     */
     public static function nameFor(string $server, string $tool): string
     {
-        $safe = static fn (string $s): string => trim(preg_replace('/[^A-Za-z0-9_-]+/', '-', $s) ?? '', '-');
+        $safe = static fn (string $s): string => trim(preg_replace('/[^a-z0-9_]+/', '_', strtolower($s)) ?? '', '_');
+        $name = self::PREFIX . $safe($server) . self::SEPARATOR . $safe($tool);
+        if (strlen($name) > self::MAX_NAME_LENGTH) {
+            $name = substr($name, 0, self::MAX_NAME_LENGTH - 9) . '_' . substr(hash('sha256', $name), 0, 8);
+        }
 
-        return $safe($server) . self::SEPARATOR . $safe($tool);
+        return $name;
     }
 
     public function entry(): CatalogEntry
@@ -57,7 +68,7 @@ class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingTo
         if (mb_strlen($first) > self::DESCRIPTION_LENGTH) {
             $first = rtrim(mb_substr($first, 0, self::DESCRIPTION_LENGTH - 1)) . '…';
         }
-        $text = sprintf('%s: %s', $this->entry->server, $this->entry->tool) . ($first === '' ? '' : ' — ' . $first);
+        $text = sprintf('%s: %s', $this->entry->label(), $this->entry->tool) . ($first === '' ? '' : ' — ' . $first);
         if ($this->entry->personalData) {
             $text .= ' [personal data]';
         }

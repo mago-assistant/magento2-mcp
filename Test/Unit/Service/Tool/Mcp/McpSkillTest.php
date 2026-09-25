@@ -91,7 +91,7 @@ final class McpSkillTest extends TestCase
     {
         $skill = $this->skill('product-list');
 
-        self::assertSame('demo__product-list', $skill->getName());
+        self::assertSame('mcp_demo__product_list', $skill->getName());
         self::assertStringStartsWith('demo: product-list — List products with filters.', $skill->getDescription());
         self::assertStringNotContainsString('Supports paging', $skill->getDescription());
         self::assertSame(
@@ -160,7 +160,7 @@ final class McpSkillTest extends TestCase
 
         self::assertFalse($skill->isReadOnly());
         self::assertContains($skill, $registry->getEnabledTools(1));
-        self::assertSame([1, 'demo__code-runner', 'write'], $checker->asked[0], 'no read action found, so write is asked');
+        self::assertSame([1, 'mcp_demo__code_runner', 'write'], $checker->asked[0], 'no read action found, so write is asked');
         self::assertSame(['type' => 'object'], $registry->getToolDefinitions(1)[0]['parameters']);
 
         $readOnlyUser = new ToolRegistry(new FakePermissionChecker(false), [$skill]);
@@ -184,10 +184,32 @@ final class McpSkillTest extends TestCase
     #[Test]
     public function namesAreProviderSafe(): void
     {
-        self::assertSame('acme__sys-info', McpSkill::nameFor('acme', 'sys:info'));
-        self::assertSame('acme__a-b-C', McpSkill::nameFor('acme', 'a.b/C'));
-        self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]+$/', McpSkill::nameFor('acme', 'sys:info'));
-        self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]+$/', McpSkill::nameFor('acme', 'a.b/C'));
+        self::assertSame('mcp_acme__sys_info', McpSkill::nameFor('acme', 'sys:info'));
+        self::assertSame('mcp_acme__a_b_c', McpSkill::nameFor('acme', 'a.b/C'));
+        self::assertSame('mcp_demo__product_list', McpSkill::nameFor('demo', 'product-list'));
+        self::assertMatchesRegularExpression('/^[a-z0-9_]+$/', McpSkill::nameFor('Acme-1', 'Sys:Info'));
+    }
+
+    #[Test]
+    public function namesAreCutAndHashedOnlyAbove64Characters(): void
+    {
+        $tool64 = str_repeat('a', 64 - strlen('mcp_demo__'));
+        self::assertSame(64, strlen(McpSkill::nameFor('demo', $tool64)));
+        self::assertSame('mcp_demo__' . $tool64, McpSkill::nameFor('demo', $tool64), 'exactly 64 is kept as is');
+
+        $long = McpSkill::nameFor('demo', $tool64 . 'b');
+        self::assertSame(64, strlen($long));
+        self::assertStringStartsWith('mcp_demo__' . substr($tool64, 0, 45) . '_', $long);
+        self::assertMatchesRegularExpression('/_[0-9a-f]{8}$/', $long);
+        self::assertNotSame($long, McpSkill::nameFor('demo', $tool64 . 'c'), 'the hash tells long names apart');
+    }
+
+    #[Test]
+    public function descriptionUsesTheServersLabelWhenItHasOne(): void
+    {
+        $this->servers->rows['demo']['label'] = 'Demo Shop';
+
+        self::assertStringStartsWith('Demo Shop: product-list — ', $this->skill('product-list')->getDescription());
     }
 
     #[Test]
@@ -216,7 +238,7 @@ final class McpSkillTest extends TestCase
         self::assertNull($skill->findRefusal(['sku' => 'A']));
         self::assertStringContainsString('"sku" must be string', $skill->findRefusal(['sku' => 3])['error']);
         $missing = $skill->findRefusal([]);
-        self::assertStringContainsString('Invalid arguments for demo__product-delete', $missing['error']);
+        self::assertStringContainsString('Invalid arguments for mcp_demo__product_delete', $missing['error']);
         self::assertStringContainsString('missing required argument "sku"', $missing['error']);
         self::assertStringContainsString('"required":["sku"]', $missing['error']);
         self::assertSame([], $this->transport->calls, 'a refusal never reaches the server');
@@ -242,7 +264,7 @@ final class McpSkillTest extends TestCase
         self::assertSame(['server' => 'demo', 'action' => 'product-list', 'content' => "one\n\ntwo", 'is_error' => false], $result);
         $logged = $this->log->messages();
         self::assertStringContainsString('MCP call', $logged);
-        self::assertStringContainsString('"skill":"demo__product-list"', $logged);
+        self::assertStringContainsString('"skill":"mcp_demo__product_list"', $logged);
         self::assertStringContainsString('argument_keys', $logged);
         self::assertStringNotContainsString('SECRET-SKU', $logged, 'argument values never reach the log');
     }
@@ -285,7 +307,7 @@ final class McpSkillTest extends TestCase
         $instructions = $this->skill('product-list', 'Prefer SKUs over ids.')->getInstructions();
 
         self::assertStringContainsString("## Server demo\nPrefer SKUs over ids.", $instructions);
-        self::assertStringContainsString('## demo__product-list', $instructions);
+        self::assertStringContainsString('## mcp_demo__product_list', $instructions);
         self::assertStringContainsString('Input schema:', $instructions);
         self::assertStringContainsString('"required":["limit"]', $instructions);
         self::assertStringNotContainsString('## Server', $this->skill('product-list')->getInstructions());

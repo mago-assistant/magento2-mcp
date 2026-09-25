@@ -113,7 +113,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
         $all = $this->plugin()->afterGetAllTools($registry, $registry->getAllTools());
 
         self::assertSame(
-            ['sales_data', 'demo__product-list', 'demo__product-delete', 'demo__code-runner'],
+            ['sales_data', 'mcp_demo__product_list', 'mcp_demo__product_delete', 'mcp_demo__code_runner'],
             self::names($all)
         );
     }
@@ -124,8 +124,8 @@ final class ToolRegistryMcpSkillsTest extends TestCase
         $registry = new ToolRegistry(new FakePermissionChecker(), [$this->magoTool]);
         $plugin = $this->plugin();
 
-        self::assertInstanceOf(McpSkill::class, $plugin->afterGetToolByName($registry, null, 'demo__product-list'));
-        self::assertInstanceOf(McpSkill::class, $plugin->afterGetToolByName($registry, null, 'demo__code-runner'));
+        self::assertInstanceOf(McpSkill::class, $plugin->afterGetToolByName($registry, null, 'mcp_demo__product_list'));
+        self::assertInstanceOf(McpSkill::class, $plugin->afterGetToolByName($registry, null, 'mcp_demo__code_runner'));
         self::assertSame($this->magoTool, $plugin->afterGetToolByName($registry, $this->magoTool, 'sales_data'));
         self::assertNull($plugin->afterGetToolByName($registry, null, 'unknown'));
     }
@@ -138,10 +138,10 @@ final class ToolRegistryMcpSkillsTest extends TestCase
 
         $enabled = $this->plugin()->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7);
 
-        self::assertSame(['sales_data', 'demo__product-list', 'demo__product-delete', 'demo__code-runner'], array_keys($enabled));
-        self::assertContains([7, 'demo__product-list', 'read'], $checker->asked);
-        self::assertContains([7, 'demo__product-delete', 'write'], $checker->asked);
-        self::assertContains([7, 'demo__code-runner', 'write'], $checker->asked);
+        self::assertSame(['sales_data', 'mcp_demo__product_list', 'mcp_demo__product_delete', 'mcp_demo__code_runner'], array_keys($enabled));
+        self::assertContains([7, 'mcp_demo__product_list', 'read'], $checker->asked);
+        self::assertContains([7, 'mcp_demo__product_delete', 'write'], $checker->asked);
+        self::assertContains([7, 'mcp_demo__code_runner', 'write'], $checker->asked);
     }
 
     #[Test]
@@ -152,9 +152,9 @@ final class ToolRegistryMcpSkillsTest extends TestCase
 
         $enabled = $this->plugin()->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7);
 
-        self::assertArrayHasKey('demo__product-list', $enabled);
-        self::assertArrayNotHasKey('demo__product-delete', $enabled, 'write denied by the checker');
-        self::assertArrayNotHasKey('demo__code-runner', $enabled, 'write denied by the checker');
+        self::assertArrayHasKey('mcp_demo__product_list', $enabled);
+        self::assertArrayNotHasKey('mcp_demo__product_delete', $enabled, 'write denied by the checker');
+        self::assertArrayNotHasKey('mcp_demo__code_runner', $enabled, 'write denied by the checker');
         self::assertArrayHasKey('sales_data', $enabled);
     }
 
@@ -165,7 +165,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
 
         $enabled = $this->plugin()->afterGetEnabledTools($registry, $registry->getEnabledTools(), null);
 
-        self::assertSame(['sales_data', 'demo__product-list', 'demo__product-delete', 'demo__code-runner'], array_keys($enabled));
+        self::assertSame(['sales_data', 'mcp_demo__product_list', 'mcp_demo__product_delete', 'mcp_demo__code_runner'], array_keys($enabled));
     }
 
     #[Test]
@@ -175,14 +175,14 @@ final class ToolRegistryMcpSkillsTest extends TestCase
 
         $definitions = array_column($registry->getToolDefinitions(7), 'name');
 
-        self::assertSame(['sales_data', 'demo__product-list'], $definitions);
-        self::assertInstanceOf(McpSkill::class, $registry->getTool('demo__product-list', 7));
-        self::assertNull($registry->getTool('demo__product-delete', 7), 'write denied');
-        self::assertNull($registry->getTool('demo__code-runner', 7), 'write denied');
-        self::assertInstanceOf(McpSkill::class, $registry->getToolByName('demo__code-runner'));
+        self::assertSame(['sales_data', 'mcp_demo__product_list'], $definitions);
+        self::assertInstanceOf(McpSkill::class, $registry->getTool('mcp_demo__product_list', 7));
+        self::assertNull($registry->getTool('mcp_demo__product_delete', 7), 'write denied');
+        self::assertNull($registry->getTool('mcp_demo__code_runner', 7), 'write denied');
+        self::assertInstanceOf(McpSkill::class, $registry->getToolByName('mcp_demo__code_runner'));
 
         $granted = new PluggedToolRegistry(new FakePermissionChecker(), [$this->magoTool], $this->plugin());
-        $write = $granted->getTool('demo__code-runner', 7);
+        $write = $granted->getTool('mcp_demo__code_runner', 7);
         self::assertInstanceOf(McpSkill::class, $write, 'a write grant makes a write usable');
         self::assertFalse($write->isReadOnly());
     }
@@ -194,9 +194,9 @@ final class ToolRegistryMcpSkillsTest extends TestCase
 
         $enabled = $this->plugin()->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7);
 
-        self::assertArrayNotHasKey('demo__product-list', $enabled);
+        self::assertArrayNotHasKey('mcp_demo__product_list', $enabled);
         self::assertArrayNotHasKey('sales_data', $enabled);
-        self::assertSame(['demo__product-delete', 'demo__code-runner'], array_keys($enabled), 'the write grant still applies');
+        self::assertSame(['mcp_demo__product_delete', 'mcp_demo__code_runner'], array_keys($enabled), 'the write grant still applies');
     }
 
     #[Test]
@@ -207,9 +207,9 @@ final class ToolRegistryMcpSkillsTest extends TestCase
 
         $enabled = $plugin->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7);
 
-        self::assertArrayHasKey('demo__product-list', $enabled);
-        self::assertArrayNotHasKey('demo__product-delete', $enabled, 'the role lacks MCP Tools - Write');
-        self::assertArrayNotHasKey('demo__code-runner', $enabled, 'the role lacks MCP Tools - Write');
+        self::assertArrayHasKey('mcp_demo__product_list', $enabled);
+        self::assertArrayNotHasKey('mcp_demo__product_delete', $enabled, 'the role lacks MCP Tools - Write');
+        self::assertArrayNotHasKey('mcp_demo__code_runner', $enabled, 'the role lacks MCP Tools - Write');
         self::assertArrayHasKey('sales_data', $enabled, "Mago's own skills are not filtered by the addon");
     }
 
@@ -227,13 +227,13 @@ final class ToolRegistryMcpSkillsTest extends TestCase
     #[Test]
     public function magosOwnSkillWinsANameClashInEnabledTools(): void
     {
-        $magoNamesake = new FakeMagoTool('demo__product-list');
+        $magoNamesake = new FakeMagoTool('mcp_demo__product_list');
         $registry = new ToolRegistry(new FakePermissionChecker(), [$magoNamesake]);
 
         $enabled = $this->plugin()->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7);
 
-        self::assertSame($magoNamesake, $enabled['demo__product-list']);
-        self::assertSame(['demo__product-list', 'demo__product-delete', 'demo__code-runner'], array_keys($enabled));
+        self::assertSame($magoNamesake, $enabled['mcp_demo__product_list']);
+        self::assertSame(['mcp_demo__product_list', 'mcp_demo__product_delete', 'mcp_demo__code_runner'], array_keys($enabled));
     }
 
     #[Test]
@@ -245,7 +245,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
         $magoEnabled = $registry->getEnabledTools(7);
 
         self::assertSame($magoAll, $plugin->afterGetAllTools($registry, $magoAll));
-        self::assertNull($plugin->afterGetToolByName($registry, null, 'demo__product-list'));
+        self::assertNull($plugin->afterGetToolByName($registry, null, 'mcp_demo__product_list'));
         self::assertSame($this->magoTool, $plugin->afterGetToolByName($registry, $this->magoTool, 'sales_data'));
         self::assertSame($magoEnabled, $plugin->afterGetEnabledTools($registry, $magoEnabled, 7));
         self::assertCount(3, $this->log->entries);

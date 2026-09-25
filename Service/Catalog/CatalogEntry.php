@@ -17,6 +17,10 @@ final class CatalogEntry
 
     /**
      * @param array<string,mixed> $inputSchema
+     * @param string $label The server's label, '' falls back to the server name
+     * @param bool $outputPublic The server's output_public flag
+     * @param array<string,array{0:string,1?:string}>|null $fieldClassification The tool's override from a
+     *        module definition, or null for the server-wide rule
      */
     public function __construct(
         public readonly string $server,
@@ -26,7 +30,15 @@ final class CatalogEntry
         public readonly string $mode,
         public readonly string $modeOrigin,
         public readonly bool $irreversible,
-        public readonly bool $personalData
+        public readonly bool $personalData,
+        public readonly string $label = '',
+        public readonly bool $outputPublic = false,
+        public readonly ?array $fieldClassification = null
     ) {
+    }
+
+    public function label(): string
+    {
+        return $this->label !== '' ? $this->label : $this->server;
     }
 }

@@ -149,7 +149,9 @@ class ToolCatalog
                 $mode,
                 $origin,
                 $irreversible,
-                $this->classifier->isPersonalData($toolName)
+                $this->classifier->isPersonalData($toolName),
+                (string)($row['label'] ?? ''),
+                (bool)($row['output_public'] ?? false)
             );
         }
 
