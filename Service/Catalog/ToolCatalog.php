@@ -16,9 +16,9 @@ use MagoAssistant\Mcp\Service\Mcp\McpException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
 
 /**
- * What the model may call: every enabled server's tools/list, cached, with a read/write/disabled mode
- * resolved per tool from the admin's overrides, the shipped defaults, the name classifier, and finally
- * the server's own annotations, which may only make a tool stricter.
+ * What the model may call: every enabled server's tools/list, cached, with a read/write mode from the
+ * name classifier tightened by the server's own annotations, as Mago's own skills carry their type in
+ * code.
  */
 class ToolCatalog
 {
@@ -40,12 +40,13 @@ class ToolCatalog
         private readonly FrontendInterface $cache,
         private readonly Config $config,
         private readonly ModeClassifier $classifier,
-        private readonly DefaultOverrides $defaults,
         private readonly ErrorLogger $errorLogger
     ) {
     }
 
     /**
+     * Every tool of every enabled server.
+     *
      * @return CatalogEntry[]
      */
     public function entries(): array
@@ -53,9 +54,7 @@ class ToolCatalog
         $entries = [];
         foreach ($this->enabledRows() as $row) {
             foreach ($this->buildEntries($row) as $entry) {
-                if ($entry->isCallable()) {
-                    $entries[] = $entry;
-                }
+                $entries[] = $entry;
             }
         }
 
@@ -63,7 +62,7 @@ class ToolCatalog
     }
 
     /**
-     * Every tool of one server, disabled ones included, whether or not the server is enabled.
+     * Every tool of one server, whether or not the server is enabled.
      *
      * @return CatalogEntry[]
      */
@@ -74,36 +73,11 @@ class ToolCatalog
         return $row === null ? [] : $this->buildEntries($row);
     }
 
-    public function find(string $action): ?CatalogEntry
-    {
-        foreach ($this->entries() as $entry) {
-            if ($entry->action() === $action) {
-                return $entry;
-            }
-        }
-
-        return null;
-    }
-
     public function serverConfig(string $name): ?ServerConfig
     {
         $row = $this->servers->getByName($name);
 
         return $row !== null && $row['enabled'] ? ServerConfig::fromRow($row) : null;
-    }
-
-    /**
-     * @return array<string,int> enabled server name => number of callable tools
-     */
-    public function serverCounts(): array
-    {
-        $counts = [];
-        foreach ($this->enabledRows() as $row) {
-            $callable = array_filter($this->buildEntries($row), static fn (CatalogEntry $e): bool => $e->isCallable());
-            $counts[(string)$row['name']] = count($callable);
-        }
-
-        return $counts;
     }
 
     /**
@@ -157,22 +131,23 @@ class ToolCatalog
         if (isset($this->entriesMemo[$name])) {
             return $this->entriesMemo[$name];
         }
-        $overrides = is_array($row['tool_overrides'] ?? null) ? $row['tool_overrides'] : [];
         $entries = [];
         foreach ($this->fetched($row)['tools'] as $tool) {
             $toolName = (string)$tool['name'];
             $annotations = is_array($tool['annotations'] ?? null) ? $tool['annotations'] : [];
-            [$mode, $origin] = $this->resolveMode($name, $toolName, $overrides, $annotations);
+            [$mode, $origin] = $this->modeOf($toolName, $annotations);
+            // A read tool is never irreversible, whatever IRREVERSIBLE_WORDS or destructiveHint says.
+            $irreversible = $mode === ModeClassifier::WRITE
+                && ($this->classifier->isIrreversible($toolName) || ($annotations['destructiveHint'] ?? false) === true);
             $entries[] = new CatalogEntry(
                 $name,
                 $toolName,
-                is_string($tool['title'] ?? null) ? $tool['title'] : '',
                 (string)($tool['description'] ?? ''),
                 $this->normaliseSchema($tool['inputSchema'] ?? null),
                 $mode,
                 $origin,
-                $this->classifier->isIrreversible($toolName) || ($annotations['destructiveHint'] ?? false) === true,
-                $this->defaults->isPersonalData($name, $toolName)
+                $irreversible,
+                $this->classifier->isPersonalData($toolName)
             );
         }
 
@@ -180,22 +155,19 @@ class ToolCatalog
     }
 
     /**
-     * @param array<string,string> $overrides
+     * The name classifier's read or write; readOnlyHint false or destructiveHint true turn a read into a
+     * write, and nothing turns a write into a read.
+     *
+     * @param string $tool
      * @param array<string,mixed> $annotations
-     * @return array{0:string,1:string}
+     * @return array{0:string,1:string} mode and where it came from
      */
-    private function resolveMode(string $server, string $tool, array $overrides, array $annotations): array
+    private function modeOf(string $tool, array $annotations): array
     {
-        $override = $overrides[$tool] ?? null;
-        if (is_string($override) && $this->classifier->isValidMode($override)) {
-            return [$override, CatalogEntry::ORIGIN_OVERRIDE];
-        }
-        $default = $this->defaults->modeFor($server, $tool);
-        if ($default !== null) {
-            return [$default, CatalogEntry::ORIGIN_DEFAULT];
-        }
         $mode = $this->classifier->classify($tool);
-        if ($mode === ModeClassifier::READ && ($annotations['readOnlyHint'] ?? null) === false) {
+        if ($mode === ModeClassifier::READ
+            && (($annotations['readOnlyHint'] ?? null) === false || ($annotations['destructiveHint'] ?? null) === true)
+        ) {
             return [ModeClassifier::WRITE, CatalogEntry::ORIGIN_ANNOTATION];
         }
 
@@ -203,19 +175,72 @@ class ToolCatalog
     }
 
     /**
-     * JSON decoding turns "properties": {} into an empty PHP array, which re-encodes as [] and is not a
-     * valid JSON Schema object. Restore the object so the model and the cache see the schema as sent.
+     * JSON decoding turns every {} into an empty PHP array, which re-encodes as [] and is not a valid
+     * JSON Schema object (providers reject "items": [] or "properties": []). Restore the object wherever
+     * JSON Schema expects one, at any depth: properties and patternProperties themselves and each entry,
+     * $defs/definitions entries, items, additionalProperties and the subschemas of not/anyOf/oneOf/allOf.
+     * Lists such as required, enum or a type array stay arrays.
      *
      * @return array<string,mixed>
      */
     private function normaliseSchema(mixed $schema): array
     {
-        $schema = is_array($schema) ? $schema : ['type' => 'object'];
-        if (array_key_exists('properties', $schema) && $schema['properties'] === []) {
-            $schema['properties'] = new \stdClass();
+        return $this->normaliseNode(is_array($schema) ? $schema : ['type' => 'object']);
+    }
+
+    /**
+     * Restore the empty objects of one schema node and walk its subschemas.
+     *
+     * @param array<mixed> $node
+     * @return array<mixed>
+     */
+    private function normaliseNode(array $node): array
+    {
+        foreach ($node as $key => $value) {
+            if (!is_array($value)) {
+                continue;
+            }
+            switch ((string)$key) {
+                case 'properties':
+                case 'patternProperties':
+                case '$defs':
+                case 'definitions':
+                    $node[$key] = $value === [] ? new \stdClass() : array_map([$this, 'normaliseSubschema'], $value);
+                    break;
+                case 'items':
+                    // An old-style tuple is a list of schemas; otherwise it is one schema.
+                    $node[$key] = $value !== [] && array_is_list($value)
+                        ? array_map([$this, 'normaliseSubschema'], $value)
+                        : $this->normaliseSubschema($value);
+                    break;
+                case 'additionalProperties':
+                case 'not':
+                    $node[$key] = $this->normaliseSubschema($value);
+                    break;
+                case 'anyOf':
+                case 'oneOf':
+                case 'allOf':
+                    $node[$key] = array_map([$this, 'normaliseSubschema'], $value);
+                    break;
+            }
         }
 
-        return $schema;
+        return $node;
+    }
+
+    /**
+     * One subschema: an empty array is the object {}, any other array is walked, anything else is kept.
+     *
+     * @param mixed $schema a subschema, possibly true or false
+     * @return mixed
+     */
+    private function normaliseSubschema(mixed $schema): mixed
+    {
+        if ($schema === []) {
+            return new \stdClass();
+        }
+
+        return is_array($schema) ? $this->normaliseNode($schema) : $schema;
     }
 
     /**

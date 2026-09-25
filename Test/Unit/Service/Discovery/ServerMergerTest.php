@@ -22,18 +22,18 @@ final class ServerMergerTest extends TestCase
     public function insertsNewUpdatesKnownAndFlagsVanished(): void
     {
         $existing = [
-            'bricklayer' => $this->row('bricklayer', DiscoveredServer::SOURCE_COMPOSER),
+            'widget' => $this->row('widget', DiscoveredServer::SOURCE_COMPOSER),
             'gone' => $this->row('gone', DiscoveredServer::SOURCE_MCP_JSON),
             'mine' => $this->row('mine', DiscoveredServer::SOURCE_MANUAL),
         ];
-        $bricklayer = new DiscoveredServer('bricklayer', ['php', 'vendor/bin/bricklayer-mcp'], [], null, DiscoveredServer::SOURCE_COMPOSER);
+        $widget = new DiscoveredServer('widget', ['php', 'vendor/bin/widget-mcp'], [], null, DiscoveredServer::SOURCE_COMPOSER);
         $fresh = new DiscoveredServer('fresh', ['node', 'x.js'], [], null, DiscoveredServer::SOURCE_MCP_JSON);
         $mineAgain = new DiscoveredServer('mine', ['php', 'other'], [], null, DiscoveredServer::SOURCE_COMPOSER);
 
-        $plan = (new ServerMerger())->plan($existing, [$bricklayer, $fresh, $mineAgain]);
+        $plan = (new ServerMerger())->plan($existing, [$widget, $fresh, $mineAgain]);
 
         self::assertSame([$fresh], $plan['insert']);
-        self::assertSame([$bricklayer], $plan['update'], 'manual rows are never updated by a scan');
+        self::assertSame([$widget], $plan['update'], 'manual rows are never updated by a scan');
         self::assertSame(['gone'], $plan['missing']);
     }
 

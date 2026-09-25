@@ -30,8 +30,8 @@ final class DiscoveredServer
 
     /**
      * Lower-case, [a-z0-9_-] only, with the vendor-ish prefixes and "-mcp" suffixes stripped, so a
-     * package named inchoo/magento-bricklayer and a .mcp.json entry named "Magento Bricklayer" both
-     * become "bricklayer": one row, and the shipped defaults keyed on that name apply to either.
+     * package named acme/magento-widget and a .mcp.json entry named "Magento Widget" both become
+     * "widget": one row, and the administrator's settings for that name apply to either.
      */
     public static function normaliseName(string $name): string
     {

@@ -13,7 +13,7 @@ $servers = $block->getServers();
         <span class="title"><?= $escaper->escapeHtml(__('MCP servers found in this project')) ?></span>
     </div>
     <div class="admin__page-section-content">
-        <p><?= $escaper->escapeHtml(__('Nothing is exposed to the assistant until a server is enabled here. Review its tools first.')) ?></p>
+        <p><?= $escaper->escapeHtml(__('Nothing is exposed to the assistant until a server is enabled here. Each tool of an enabled server then appears in Skills & Permissions with its own per-user permission. A server that is not found here can be added as a stdio entry in the Magento root\'s .mcp.json.')) ?></p>
         <div class="admin__page-actions">
             <form method="post" action="<?= $escaper->escapeUrl($block->getRescanUrl()) ?>" class="mago-mcp-inline-form">
                 <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
@@ -23,7 +23,6 @@ $servers = $block->getServers();
                 <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
                 <button type="submit" class="action-default"><?= $escaper->escapeHtml(__('Refresh tool lists')) ?></button>
             </form>
-            <a class="action-primary" href="<?= $escaper->escapeUrl($block->getNewUrl()) ?>"><?= $escaper->escapeHtml(__('Add manual server')) ?></a>
         </div>
         <table class="data-grid">
             <thead>
@@ -32,7 +31,7 @@ $servers = $block->getServers();
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Source')) ?></th>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Command')) ?></th>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Enabled')) ?></th>
-                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Tools (on/total)')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Tools')) ?></th>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Status')) ?></th>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Actions')) ?></th>
                 </tr>
@@ -44,7 +43,7 @@ $servers = $block->getServers();
                     <td><?= $escaper->escapeHtml($server['source']) ?></td>
                     <td><code><?= $escaper->escapeHtml(implode(' ', $server['command'])) ?></code></td>
                     <td><?= $escaper->escapeHtml($server['enabled'] ? __('Yes') : __('No')) ?></td>
-                    <td><?= $server['enabled'] ? (int)$server['tools_enabled'] . ' / ' . (int)$server['tools_total'] : '—' ?></td>
+                    <td><?= $server['enabled'] ? (int)$server['tools_total'] : '—' ?></td>
                     <td>
                         <?php if ($server['missing']): ?>
                             <span class="grid-severity-major"><?= $escaper->escapeHtml(__('Missing')) ?></span>
@@ -54,7 +53,6 @@ $servers = $block->getServers();
                         <?php endif; ?>
                     </td>
                     <td>
-                        <a href="<?= $escaper->escapeUrl($block->getEditUrl($server['name'])) ?>"><?= $escaper->escapeHtml(__('Edit')) ?></a>
                         <form method="post" action="<?= $escaper->escapeUrl($block->getToggleUrl()) ?>" class="mago-mcp-inline-form">
                             <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
                             <input type="hidden" name="name" value="<?= $escaper->escapeHtmlAttr($server['name']) ?>"/>

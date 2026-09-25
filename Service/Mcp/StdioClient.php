@@ -11,7 +11,7 @@ use MagoAssistant\Mcp\Api\McpClientInterface;
 /**
  * Spawns the server for every request: initialize, initialized, the request, close.
  *
- * Bricklayer boots Magento on start, so a call costs a second or two; the catalog caches tools/list so
+ * A server that boots the application on start costs a second or two per call; the catalog caches tools/list so
  * only real tool calls pay it. Persistent processes are out of scope for version 1.
  */
 class StdioClient implements McpClientInterface

@@ -1,8 +1,8 @@
 {
     "name": "mago-assistant/magento2-mcp",
-    "description": "Mago Assistant addon: use tools from any installed MCP server as a Mago skill",
+    "description": "Mago Assistant addon: every tool of an installed MCP server becomes a Mago skill",
     "type": "magento2-module",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "license": "MIT",
     "require": {
         "php": "~8.2.0||~8.3.0||~8.4.0||~8.5.0",

@@ -13,13 +13,13 @@ use PHPUnit\Framework\TestCase;
 final class DockerExecUnwrapperTest extends TestCase
 {
     #[Test]
-    public function unwrapsThisRepositoriesBricklayerEntry(): void
+    public function unwrapsADockerExecEntryIntoTheInnerCommand(): void
     {
         $result = (new DockerExecUnwrapper())->unwrap('docker', ['exec', '-i', '-u', 'app', '-w', '/var/www/magento',
-            '-e', 'BRICKLAYER_MAGENTO_ROOT=/var/www/magento', 'php', 'php', '/var/www/magento/vendor/bin/bricklayer-mcp'], []);
+            '-e', 'WIDGET_MAGENTO_ROOT=/var/www/magento', 'php', 'php', '/var/www/magento/vendor/bin/widget-mcp'], []);
 
-        self::assertSame(['php', '/var/www/magento/vendor/bin/bricklayer-mcp'], $result['command']);
-        self::assertSame(['BRICKLAYER_MAGENTO_ROOT' => '/var/www/magento'], $result['env']);
+        self::assertSame(['php', '/var/www/magento/vendor/bin/widget-mcp'], $result['command']);
+        self::assertSame(['WIDGET_MAGENTO_ROOT' => '/var/www/magento'], $result['env']);
         self::assertSame('/var/www/magento', $result['cwd']);
     }
 

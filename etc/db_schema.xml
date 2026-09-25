@@ -10,7 +10,6 @@
         <column xsi:type="varchar" name="source" nullable="false" length="16" default="manual" comment="composer, mcp_json or manual"/>
         <column xsi:type="smallint" name="enabled" unsigned="true" nullable="false" identity="false" default="0" comment="Exposed to the assistant"/>
         <column xsi:type="smallint" name="missing" unsigned="true" nullable="false" identity="false" default="0" comment="Last scan did not find it"/>
-        <column xsi:type="text" name="tool_overrides" nullable="true" comment="JSON object: tool name to read|write|disabled"/>
         <column xsi:type="text" name="last_error" nullable="true" comment="Last tools/list failure"/>
         <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created"/>
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated"/>

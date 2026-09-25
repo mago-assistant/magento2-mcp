@@ -67,10 +67,10 @@ final class ComposerSourceTest extends TestCase
     #[Test]
     public function derivesNameAndCommandFromMcpBinaries(): void
     {
-        touch($this->root . '/vendor/bin/bricklayer-mcp');
-        touch($this->root . '/vendor/bin/bricklayer-mcp-docker');
+        touch($this->root . '/vendor/bin/widget-mcp');
+        touch($this->root . '/vendor/bin/widget-mcp-docker');
         $this->installed([
-            ['name' => 'inchoo/magento-bricklayer', 'bin' => ['bin/bricklayer', 'bin/bricklayer-mcp', 'bin/bricklayer-mcp-docker']],
+            ['name' => 'acme/magento-widget', 'bin' => ['bin/widget', 'bin/widget-mcp', 'bin/widget-mcp-docker']],
             ['name' => 'other/tool', 'bin' => ['bin/tool']],
             ['name' => 'ghost/mcp-thing', 'bin' => ['bin/mcp-thing']],
         ]);
@@ -78,8 +78,8 @@ final class ComposerSourceTest extends TestCase
         $servers = $this->source()->discover();
 
         self::assertCount(1, $servers, 'only binaries that exist in vendor/bin count');
-        self::assertSame('bricklayer', $servers[0]->name);
-        self::assertSame(['php', 'vendor/bin/bricklayer-mcp'], $servers[0]->command);
+        self::assertSame('widget', $servers[0]->name);
+        self::assertSame(['php', 'vendor/bin/widget-mcp'], $servers[0]->command);
     }
 
     #[Test]

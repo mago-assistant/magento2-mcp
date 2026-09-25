@@ -18,18 +18,14 @@
     </type>
 
     <!--
-        The whole registration with Mago, exactly as its VIES example addon does it: one item appended
-        to the assistant's tool registry. Nothing inside MagoAssistant_Mago is edited.
+        One Mago skill per MCP tool, added to Mago's registry through "after" plugins (no preference,
+        no around). Nothing inside MagoAssistant_Mago is edited.
     -->
     <type name="MagoAssistant\Mago\Service\Tool\ToolRegistry">
-        <arguments>
-            <argument name="tools" xsi:type="array">
-                <item name="mcp" xsi:type="object">MagoAssistant\Mcp\Service\Tool\McpTool</item>
-            </argument>
-        </arguments>
+        <plugin name="mago_mcp_skills" type="MagoAssistant\Mcp\Plugin\ToolRegistryMcpSkills"/>
     </type>
 
-    <!-- Chat panel labels: show "server: tool" instead of "mcp" for this addon's own tool events -->
+    <!-- Status line only: 'Running <name>...' becomes a phrase such as 'Getting order...'; the tag is the skill name already. -->
     <type name="MagoAssistant\Mago\Service\Ai\ChatService">
         <plugin name="mago_mcp_tool_display" type="MagoAssistant\Mcp\Plugin\ChatServiceToolDisplay"/>
     </type>
@@ -42,41 +38,6 @@
                 <item name="mago_mcp_refresh" xsi:type="object">MagoAssistant\Mcp\Console\Command\RefreshTools</item>
                 <item name="mago_mcp_enable" xsi:type="object">MagoAssistant\Mcp\Console\Command\EnableServer</item>
                 <item name="mago_mcp_disable" xsi:type="object">MagoAssistant\Mcp\Console\Command\DisableServer</item>
-            </argument>
-        </arguments>
-    </type>
-
-    <!--
-        Shipped server profiles. Keyed by the normalised server name discovery produces. A module that
-        ships its own MCP server adds a profile for it in its own di.xml with the same three arguments.
-    -->
-    <type name="MagoAssistant\Mcp\Service\Catalog\DefaultOverrides">
-        <arguments>
-            <argument name="disabledTools" xsi:type="array">
-                <item name="bricklayer" xsi:type="array">
-                    <item name="code-runner" xsi:type="string">code-runner</item>
-                    <item name="code-runner-help" xsi:type="string">code-runner-help</item>
-                    <item name="batch-execute" xsi:type="string">batch-execute</item>
-                    <item name="reinitialize" xsi:type="string">reinitialize</item>
-                    <item name="generate-module" xsi:type="string">generate-module</item>
-                    <item name="generate-model" xsi:type="string">generate-model</item>
-                    <item name="generate-controller" xsi:type="string">generate-controller</item>
-                    <item name="generate-api" xsi:type="string">generate-api</item>
-                </item>
-            </argument>
-            <argument name="readTools" xsi:type="array">
-                <item name="bricklayer" xsi:type="array">
-                    <item name="database-query" xsi:type="string">database-query</item>
-                </item>
-            </argument>
-            <argument name="personalDataPrefixes" xsi:type="array">
-                <item name="bricklayer" xsi:type="array">
-                    <item name="customer" xsi:type="string">customer-</item>
-                    <item name="order" xsi:type="string">order-</item>
-                    <item name="invoice" xsi:type="string">invoice-</item>
-                    <item name="shipment" xsi:type="string">shipment-</item>
-                    <item name="creditmemo" xsi:type="string">creditmemo-</item>
-                </item>
             </argument>
         </arguments>
     </type>

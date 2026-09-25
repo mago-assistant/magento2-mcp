@@ -9,6 +9,7 @@ namespace MagoAssistant\Mcp\Console\Command;
 use Magento\Framework\App\Area;
 use Magento\Framework\App\State;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
+use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Formatter\OutputFormatter;
@@ -22,6 +23,7 @@ class ListServers extends Command
         private readonly ServerRepositoryInterface $servers,
         private readonly ToolCatalog $catalog,
         private readonly State $appState,
+        private readonly ModeClassifier $classifier,
         ?string $name = null
     ) {
         parent::__construct($name);
@@ -30,7 +32,7 @@ class ListServers extends Command
     protected function configure(): void
     {
         $this->setName('mago:mcp:list')
-            ->setDescription('List MCP servers, or the tools of one server with their effective mode.')
+            ->setDescription('List MCP servers, or the tools of one server with their type.')
             ->addArgument('server', InputArgument::OPTIONAL, 'Server name to show tools for');
         parent::configure();
     }
@@ -68,12 +70,13 @@ class ListServers extends Command
         }
         foreach ($this->catalog->entriesForServer((string)$name) as $entry) {
             $output->writeln(sprintf(
-                '%-36s %-9s (%s)%s%s',
+                '%-36s %-6s (%s)%s%s%s',
                 OutputFormatter::escape($entry->tool),
                 $entry->mode,
                 $entry->modeOrigin,
                 $entry->irreversible ? ' irreversible' : '',
-                $entry->personalData ? ' personal-data' : ''
+                $entry->personalData ? ' personal-data' : '',
+                $this->classifier->isExecutionSurface($entry->tool) ? ' execution' : ''
             ));
         }
 

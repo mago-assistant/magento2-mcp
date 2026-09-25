@@ -1,10 +1,11 @@
-# Mago Assistant addon: MCP servers as a skill
+# Mago Assistant addon: MCP servers as skills
 
 [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is a standard way for a tool server to
 tell an AI client which tools it has and how to call them. This addon discovers every MCP server
-already installed in your Magento project and exposes their tools to Mago Assistant as one skill,
-`mcp`. Install [Bricklayer](https://github.com/inchoo/magento-bricklayer) and the first thing you get
-for free is catalog, order and system tools you can ask the assistant about in plain language.
+already installed in your Magento project and turns each of its tools into its own Mago skill, listed
+beside Mago's own. Install a server such as [Bricklayer](https://github.com/inchoo/magento-bricklayer)
+and the first thing you get for free is catalog, order and system tools you can ask the assistant about
+in plain language.
 
 ## Install
 
@@ -18,21 +19,53 @@ bin/magento cache:flush
 Or drop the module into `app/code/MagoAssistant/Mcp` and run the same `module:enable`,
 `setup:upgrade`, `cache:flush` sequence.
 
+### Upgrading from 1.0.0
+
+Version 1.0.0 exposed every write-named tool behind the confirmation card, shipped a profile that made
+one server's query tool a read, and let an administrator override any tool's mode to `read`, `write` or
+`disabled` on a per-tool row. All three are gone. `setup:upgrade` drops the `tool_overrides` column
+outright — any per-tool overrides or disabled tools from an earlier version are discarded — and a
+tool's type is now fixed by its name and the server's annotations alone, exactly as Mago's own skills
+carry their type in code. There is no mode select anywhere and none is needed: every tool of an enabled
+server runs, a read at once and a write behind Mago's confirmation card.
+
+The single `mcp` skill is also gone, replaced by one skill per tool (`<server>__<tool>`). Its per-user
+permission rows do not apply to the new per-tool skills: a user you had set to Read Only or Disabled on
+`mcp` falls back to the role ACL after the upgrade and regains every read tool the role allows and, for
+a write-capable role, every write tool too. Before upgrading, remove `MCP Tools - Read` /
+`MCP Tools - Write` from roles that should not use MCP, or set per-user permissions on the new per-tool
+rows afterwards. The addon's own ACL resources (`MCP Tools - Read` / `MCP Tools - Write`) now also decide
+which MCP skills a role is offered at all, not only which may run.
+
+An execution tool — a code runner, a raw SQL query tool — is now simply a write tool like any other: it
+runs behind the confirmation card for any admin whose role holds `MCP Tools - Write`, with no separate
+switch to keep it off. See Security below for how to restrict it.
+
+The "MCP Servers" menu entry is under **Stores > Admin Assistant > MCP Servers** for discovery,
+enable/disable, rescan and refresh; there is no edit page and no manual-server form any more — add a
+server discovery does not find as a stdio entry in `.mcp.json` instead (see below).
+
 ## Enable a server
 
 Discovery never enables anything by itself — it only makes a server visible so an administrator can
 turn it on.
 
-In the admin: **Stores > Admin Assistant > MCP Servers**. Discovered and manually added servers are
-listed there; open one to enable it, review its tools, and set a read/write/disabled override per
-tool.
+In the admin: **Stores > Admin Assistant > MCP Servers** is a grid of discovered servers — name, source,
+command, enabled, tool count, status — with Enable/Disable per row and Rescan and Refresh tool lists as
+toolbar buttons. There is no edit page and no "Add manual server" form: a server discovery does not find
+is added as a stdio entry in the Magento root's `.mcp.json` (see below), then picked up the next time the
+grid rescans.
+
+Once a server is enabled, each of its tools appears as its own row, `<server>__<tool>`, in **Stores >
+Admin Assistant > Skills & Permissions** beside Mago's own skills, with Mago's own per-user permission
+controls and nothing added by this addon.
 
 From the CLI:
 
 ```bash
 bin/magento mago:mcp:discover        # scan Composer packages and, if enabled, .mcp.json
 bin/magento mago:mcp:list            # show every known server, its source and its state
-bin/magento mago:mcp:list <server>   # show one server's tools and their mode
+bin/magento mago:mcp:list <server>   # show one server's tools and their type
 bin/magento mago:mcp:enable <server>
 bin/magento mago:mcp:disable <server>
 bin/magento mago:mcp:refresh <server>  # drop the cached tool list and re-fetch it
@@ -40,12 +73,21 @@ bin/magento mago:mcp:refresh <server>  # drop the cached tool list and re-fetch 
 
 ## How it reaches the model
 
-Every enabled server's tools are folded into a single Mago skill named `mcp`. The model does not see
-one tool per MCP tool; it sees one skill whose `action` parameter is `server:tool` (for example
-`bricklayer:product-list`). The full per-action argument schema is not part of the always-sent
-description — it arrives in the just-in-time instructions after the first call to that action, and
-again in the error message if the call's arguments do not validate. Each call spawns one server
-process, makes the one request, and lets the process exit; there are no long-lived MCP sessions.
+Every tool of an enabled server is its own Mago skill, named `<server>__<tool>` (two underscores,
+because AI providers only allow letters, digits, `_` and `-` in a tool name, so a colon cannot separate
+the parts). The model receives one function definition per exposed tool on every turn, each with the
+tool's own argument schema. The description sent every turn is the tool's first sentence, in the form
+`<server>: <tool> — <summary>`, followed by ` [personal data]` and/or ` [runs code, SQL or commands]`
+when the tool's name says so; the full description and full schema arrive as just-in-time instructions
+after the first call to that tool, and again in the error message if the call's arguments do not
+validate. Each call spawns one server process, makes the one request, and lets the process exit; there
+are no long-lived MCP sessions.
+
+Each tool an admin's role and per-user permission allow adds one function definition to every request to
+the model on their behalf, whether or not that tool is used in that turn. Enabling a large server
+measurably grows the token cost of every conversation turn for every admin who can call it; disable a
+server you are not using, or hold `MCP Tools - Read` / `MCP Tools - Write` on fewer roles, to keep that
+cost down.
 
 Tool lists are fetched once per server and cached in the `mago_mcp` cache type for the configured
 lifetime (an hour by default). `setup:upgrade` registers and enables that cache type automatically; if
@@ -53,68 +95,67 @@ it is ever disabled, `bin/magento cache:enable mago_mcp` turns it back on, and
 `bin/magento cache:clean mago_mcp` (or `mago:mcp:refresh`) forces a re-fetch after a server's tools
 change.
 
-Every enabled tool adds a line to the skill's description on every request to the model, whether or
-not that tool is used. Enabling a large server measurably grows the token cost of every conversation
-turn — enable only the servers and tools you actually want the assistant reaching for.
+While a call runs, the chat panel reads like one of Mago's own skills, because it is one: the tag is
+the tool's own skill name (`shop__order-get`), and the status line a plain phrase built from the
+tool name, `Getting order...`. Two `before` plugins on Mago's streaming entry points build that phrase
+for the status line only — no tag relabelling is needed, and there is no `around` plugin anywhere in
+the module.
 
-While a call runs, the chat panel reads like one of Mago's own skills: the tag shows the full path
-`mcp:bricklayer:order-get` (skill, server, tool), and the status line a plain phrase built from the
-tool name, `Getting order...`. A plugin on Mago's streaming entry points relabels the addon's own
-events; Mago's code is untouched. Reloaded conversations show the stored `mcp` name.
+## Read or write
 
-## Read, write, disabled
-
-Each tool is classified `read`, `write`, or `disabled`. The default classification comes from the
-tool's name, split on `-`/`_`:
+Each tool is classified `read` or `write`. The classification comes from the tool's name, split on
+`-`/`_`:
 
 - A **write word** anywhere in the name (`create`, `update`, `delete`, `set`, `add`, `assign`,
   `cancel`, `hold`, `unhold`, `execute`, `run`, `runner`, `generate`, `reinitialize`, `flush`, `clean`,
   `write`, `remove`, `import`, `sync`, `save`, `put`, `post`, `send`, `apply`, `upgrade`, `install`,
-  `clear`, `reindex`, `regenerate`, `rebuild`, `reset`, `purge`, `truncate`, `drop`) always wins, no
-  matter where else a read word appears.
+  `clear`, `reindex`, `regenerate`, `rebuild`, `reset`, `purge`, `truncate`, `drop`, `change`, `mark`,
+  `replace`, `export`, `enable`, `disable`, `toggle`, `activate`, `deactivate`, `unlock`, `merge`,
+  `push`, `commit`, `refund`, `void`, `approve`, `publish`, `archive`, `trigger`, `kill`, `restart`,
+  `start`, `stop`, `move`, `edit`, `upload`, `fork`, `dismiss`, `charge`, `ship`, `finalize`,
+  `moderate`, `cleanup`, `fill`, `click`, `press`, `drag`, `close`, `fix`, `repair`, `patch`,
+  `capture`, `rename`, `erase`, `wipe`, `destroy`, `revoke`, `unassign`, `unlink`, `detach`,
+  `invalidate`, `expire`, `terminate`, `suspend`, `ban`, `reject`, `revert`, `rollback`, `restore`,
+  `prune`) always wins, no matter where else a read word appears.
 - Otherwise the name is **read** if its first or last segment is a read verb (`get`, `list`, `inspect`,
   `search`, `show`, `read`, `find`, `help`, `validate`, `diagnose`, `check`), or its last segment is a
   read noun (`tree`, `info`, `status`, `context`, `schema`, `endpoints`, `comments`, `items`, `orders`,
   `addresses`, `rewrites`, `log`, `structure`, `types`, `attributes`, `products`, `configuration`).
 - Anything else — including a name with no recognisable word at all — **fails closed to write**.
-  `query` is deliberately not on the read list: a query can mutate. (Bricklayer's own `database-query`
-  tool only runs `SELECT` statements; its shipped default below overrides this classifier's write with
-  a read, rather than changing the general rule.)
+  `query` is deliberately not on the read list: a query can mutate. A SELECT-only query tool
+  therefore classifies `write`, so it runs behind Mago's confirmation card rather than skipping it.
 
 A server's own annotations (`readOnlyHint`, `destructiveHint`) are read too, but only to make a tool
 *stricter* than the name would suggest: `readOnlyHint: false` or `destructiveHint: true` can turn a
 name-classified read into a write, never the other way around. Servers are not required to annotate
 correctly, and a wrong "this is safe" annotation must never be trusted over the name.
 
-The administrator can override any tool's mode to `read`, `write`, or `disabled` on the server's edit
-page; that override always wins over both the name and the annotations.
+A tool's type is then fixed, exactly like one of Mago's own skills carrying its type in code: there is
+no override, no `disabled` mode, and no hidden state. Who may use a tool is Mago's business alone — the
+role ACL (`MCP Tools - Read` / `MCP Tools - Write`) and the per-user table on that tool's own Skills &
+Permissions page, the same as for any other skill. See Security below for how to restrict a tool you
+would rather keep off.
 
-A `write` action goes through Mago's normal confirmation card before it runs; a `delete` or `cancel`
-style action is flagged irreversible and the card shows its impacts. An invalid write — unknown
-action, malformed JSON arguments, a missing required argument, or an argument of the wrong scalar type
-— is refused before the confirmation card is even shown, so the administrator is never asked to
-confirm a call that would fail anyway.
+A `write` tool goes through Mago's normal confirmation card before it runs; a `delete` or `cancel`
+style tool is flagged irreversible and the card shows its impacts. An invalid write — a missing required
+argument, or an argument of the wrong scalar type — is refused before the confirmation card is even
+shown, so the administrator is never asked to confirm a call that would fail anyway. A tool a user's role or per-user permission does not allow is simply not offered to the
+model as a skill for that user, exactly like a disallowed Mago skill; the role must also hold the
+addon's own resource for that tool's type (`MCP Tools - Read` or `MCP Tools - Write`).
 
-## Shipped Bricklayer defaults
+Names can fool a word list: a write disguised behind a read noun (`nuke-log`) still classifies read.
+Review a new server's tools once; since there is no per-tool override to correct a wrong name locally,
+restrict a mis-named tool through the role, the per-user setting, or by disabling the server, until
+upstream fixes its name.
 
-Because Bricklayer is a developer tool with tools that touch the filesystem and the codebase, this
-addon ships its execution surfaces disabled by default:
-
-- `code-runner`, `code-runner-help`, `batch-execute`, `reinitialize`,
-  `generate-module`, `generate-model`, `generate-controller`, `generate-api`
-
-**These run arbitrary PHP. Enabling any of them turns the chat panel into a remote shell for anyone who
-holds the chat permission. Only enable them for a trusted, access-controlled admin, and never on a
-production store.**
-
-`database-query` ships as a `read`: Bricklayer only accepts `SELECT` statements from it and caps the
-number of rows returned, so it does not belong with the execution surfaces above.
-
-Every tool that returns personal data by design — `customer-*`, `order-*`, `invoice-*`, `shipment-*`,
-`creditmemo-*` — is flagged `personal data` in the admin, but otherwise follows the normal read/write
-rule and ships exposed like any other tool: reads (`customer-get`, `order-list`, ...) are available to
-the model immediately, writes (`customer-create`, `order-cancel`, ...) still go through the
-confirmation card.
+A tool whose name says it runs code, SQL or commands (`exec`, `execute`, `eval`, `evaluate`, `run`,
+`runner`, `script`, `shell`, `bash`, `terminal`, `console`, `cli`, `command`, `php`, `sql`, `unsafe`,
+`generate`, `scaffold`, `reinitialize`, `install`, `uninstall`, `upgrade`, `migrate`, `batch`) carries
+` [runs code, SQL or commands]` on its description and `execution` in `mago:mcp:list`; such a tool runs
+arbitrary PHP or SQL — see Security below. Tools that return personal data by their name (`customer`,
+`order`, `invoice`, `shipment`, `creditmemo`, `address`, `email`, `phone`, `account`, `user`,
+`subscriber`, `quote`, `cart`, `wishlist`, `review`) carry ` [personal data]` the same way. Both flags
+are information; neither changes a tool's type.
 
 ## Privacy
 
@@ -124,12 +165,33 @@ heuristic scrub still runs over that text before it reaches the model, but it is
 emails, phone numbers and similar values, but names and street addresses embedded in a result are not
 reliably caught.
 
-The owner's accepted trade-off for this build is that Bricklayer's personal-data read tools
-(`customer-get`, `order-list`, and the rest) ship exposed rather than disabled, so the assistant can
-answer ordinary customer-service questions without a manual step first. That means those tools can
-return customer names and addresses to the model. If that is not acceptable for your store, set the
-individual tool's mode to `disabled` on the server's edit page — the personal-data flag on each row
-makes them easy to find — or disable the whole server.
+Read tools that return personal data (`customer-get`, `order-list` and the like) run for every user
+whose role and per-user permission allow them, so the assistant can answer ordinary customer-service
+questions without a manual step first. That means those tools can return customer names and addresses
+to the model. If that is not acceptable for your store, set the individual tool to Disabled for the
+affected users on its own Skills & Permissions page — the `[personal data]` flag on each tool's
+description makes them easy to find — restrict the `MCP Tools - Read` role, or disable the whole server.
+
+## Security
+
+An execution tool — a code runner, a raw SQL query tool — is a write skill like any other MCP tool:
+available, behind the confirmation card, to every admin whose role holds `MCP Tools - Write`. The addon
+does not gate it any more tightly than that. The trade-off is deliberate: one confirmation click stands
+between that permission and arbitrary PHP or SQL running on the store, in exchange for MCP tools
+behaving exactly like Mago's own skills, with no extra layer of switches to reason about.
+
+A raw SQL tool whose name only says `query` carries no execution flag (`query` is deliberately not an
+execution word); it is still a write behind a confirmation card.
+
+Restrict it the same way any of Mago's own write skills is restricted:
+
+- Grant `MCP Tools - Write` to few roles.
+- Set the tool to Disabled for the users who should not have it, on that tool's own Skills &
+  Permissions page.
+- Disable the server entirely, on the MCP Servers page.
+
+The ` [personal data]` and ` [runs code, SQL or commands]` flags on a tool's description, and the
+matching suffixes in `mago:mcp:list`, make it easy to find which tools need this.
 
 ## For package authors
 
@@ -161,41 +223,10 @@ Either way, the discovered name is normalised — lower-cased, non `[a-z0-9_-]` 
 suffix are stripped. This is what lets a Composer package and a `.mcp.json` entry for the same server
 resolve to one row; when both name the same server, the Composer declaration wins.
 
-### Shipping defaults for your server
-
-`Service\Catalog\DefaultOverrides` ships no server names of its own; it reads whatever profiles are
-wired into it via `di.xml`. A module can add a profile for its own server the same way this addon adds
-one for Bricklayer, without editing any file in this module:
-
-```xml
-<type name="MagoAssistant\Mcp\Service\Catalog\DefaultOverrides">
-    <arguments>
-        <argument name="disabledTools" xsi:type="array">
-            <item name="acme" xsi:type="array">
-                <item name="wipe-database" xsi:type="string">wipe-database</item>
-            </item>
-        </argument>
-        <argument name="readTools" xsi:type="array">
-            <item name="acme" xsi:type="array">
-                <item name="search" xsi:type="string">search</item>
-            </item>
-        </argument>
-        <argument name="personalDataPrefixes" xsi:type="array">
-            <item name="acme" xsi:type="array">
-                <item name="customer" xsi:type="string">customer-</item>
-            </item>
-        </argument>
-    </arguments>
-</type>
-```
-
-The key under each argument is the normalised server name (see above); the value is a list of tool
-names (`disabledTools`, `readTools`) or tool-name prefixes (`personalDataPrefixes`). `disabledTools`
-ships tools disabled until an administrator switches them on; `readTools` forces tools the name
-classifier would otherwise call a write to read instead; `personalDataPrefixes` flags tool names
-returning personal data regardless of their mode. Magento merges array arguments by item name, so this
-block can sit in the module's own `di.xml` alongside the entries for any other server without touching
-this addon.
+A tool's type is not something a package ships: it comes from the tool's name and, when present, the
+server's own MCP annotations. If your server marks tools with annotations, `readOnlyHint: false` and
+`destructiveHint: true` are honoured — they only ever make a tool stricter; `readOnlyHint: true` alone
+is not trusted.
 
 ## `.mcp.json`
 
@@ -210,13 +241,22 @@ MCP over stdio, and there is no host-side executable to run for a remote server.
 
 A failed process spawn, a malformed handshake, or a tool call that raises an MCP error is written to
 `var/log/mago-error.log`. When Mago's own debug flag is on, every call also writes metadata —
-the action, argument keys, whether the result was an error, and the result's block count and character
+the skill, argument keys, whether the result was an error, and the result's block count and character
 length — to `var/log/mago-debug.log`. Raw tool arguments and raw result text are never written to the
 debug log, only that metadata, in keeping with Mago's rule of keeping potentially sensitive data out of
 its own logs even in debug mode.
 
-## Limits of version 1
+## Limits of version 2
 
+- **The registry plugin depends on Mago's `ToolRegistry`, not `@api`.** Every MCP skill reaches the
+  Skills & Permissions list, the chat, and the skill edit page through `after` plugins on that class's
+  public methods. If Mago renames or removes them, the MCP skills disappear from the list and from
+  chat until the plugin is updated to match; Mago itself keeps working throughout.
+- **Tool arguments whose name starts with `_` are dropped** before the call: Mago reserves that prefix
+  for its own keys (`_admin_user_id`).
+- **A user's per-skill permission rows are now per tool, so there can be many** — one row per exposed
+  MCP tool instead of one row for the whole `mcp` skill. Mago's own Skills & Permissions grid pages, so
+  this is a longer list to page through, not a broken one.
 - **stdio only.** HTTP and SSE MCP servers are not supported; see `.mcp.json` above.
 - **Tools only.** MCP resources and prompts are not exposed as anything the model can use.
 - **No persistent processes.** Every call spawns a fresh process and lets it exit; a server that
@@ -229,25 +269,20 @@ its own logs even in debug mode.
   who can call one enabled server's read tools can call every enabled server's read tools.
 - **Protocol versions 2024-11-05 through 2025-06-18** are negotiated; a server that only speaks an
   older or newer version is rejected during the handshake.
-- **The chat panel relabeling depends on Mago internals.** `ChatService` is not `@api`, so the plugin
-  reads its `tool_call`/`tool_status` event shapes (`name`/`input`, `name`/`status`/`message`) without
-  a contract. If Mago changes those shapes, the events simply pass through unrelabeled and the panel
-  goes back to showing `mcp`; nothing breaks.
-- **Several MCP calls in one turn: status lines stay generic.** The tool tags are always exact (each
-  `tool_call` event carries its own input), but Mago emits no status for a call it denied or one the
-  admin left unticked on the confirmation card, so when more than one MCP call is in flight there is no
-  reliable way to tell which running/done/failed status belongs to which call. Rather than guess, the
-  status line keeps the generic `mcp` name and Mago's own message in that case.
+- **The status-line phrase depends on Mago internals.** `ChatService` is not `@api`, so the two
+  `before` plugins read its `tool_status` event shape (`name`/`status`/`message`) without a contract.
+  If Mago changes that shape, the phrase-building simply does not match and the status line falls back
+  to Mago's own generic message; the tag, which is just the skill's own name and needs no relabeling,
+  is unaffected either way.
 
 ## Environment variables
 
-Whatever environment variables are stored for a server — from a Composer `extra.mago-mcp` block, a
-`.mcp.json` entry, or typed into the manual "Add server" form — are passed to that server's process
-exactly as stored, with no filtering. This addon does not attempt to restrict which variables can be
-set: whoever can set a server's environment can already set its executable and arguments, so filtering
-the environment would not add any protection. Treat the ability to add or edit an MCP server the same
-as the ability to run arbitrary code on the Magento host, and restrict that admin resource
-accordingly.
+Whatever environment variables are stored for a server — from a Composer `extra.mago-mcp` block or a
+`.mcp.json` entry — are passed to that server's process exactly as stored, with no filtering. This
+addon does not attempt to restrict which variables can be set: whoever can edit a package's
+`composer.json` or the Magento root's `.mcp.json` can already set that server's executable and
+arguments, so filtering the environment would not add any protection. Treat the ability to edit either
+file the same as the ability to run arbitrary code on the Magento host.
 
 ## Development
 

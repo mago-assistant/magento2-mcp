@@ -6,7 +6,22 @@ declare(strict_types=1);
 
 namespace MagoAssistant\Mcp\Test\Unit\Service\Chat;
 
+use Magento\Framework\Serialize\Serializer\Json;
+use MagoAssistant\Mago\Api\Config\RepositoryInterface as MagoConfig;
+use MagoAssistant\Mago\Logger\DebugLogger;
+use MagoAssistant\Mago\Logger\ErrorLogger;
+use MagoAssistant\Mcp\Model\Config;
+use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
+use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Chat\ToolEventRelabeler;
+use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
+use MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMcpClient;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeServerRepository;
+use MagoAssistant\Mcp\Test\Unit\Fakes\ThrowingSkillRegistry;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -22,110 +37,128 @@ final class ToolEventRelabelerTest extends TestCase
         };
     }
 
-    #[Test]
-    public function relabelsTheAddonsOwnEventsAndLeavesOthersAlone(): void
+    private function registry(): SkillRegistry
     {
-        $wrapped = (new ToolEventRelabeler())->wrap($this->recorder());
-
-        $wrapped('tool_call', ['id' => 'c1', 'name' => 'mcp', 'input' => ['action' => 'bricklayer:product-list', 'arguments' => []]]);
-        $wrapped('tool_call', ['id' => 'c2', 'name' => 'sales_data', 'input' => ['action' => 'recent_orders']]);
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'running', 'message' => 'Running mcp...']);
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'done', 'duration_ms' => 12]);
-        $wrapped('tool_status', ['name' => 'sales_data', 'status' => 'running', 'message' => 'Fetching recent orders...']);
-        $wrapped('text', ['text' => 'hi']);
-
-        self::assertSame([
-            ['tool_call', ['id' => 'c1', 'name' => 'mcp:bricklayer:product-list', 'input' => ['action' => 'bricklayer:product-list', 'arguments' => []]]],
-            ['tool_call', ['id' => 'c2', 'name' => 'sales_data', 'input' => ['action' => 'recent_orders']]],
-            ['tool_status', ['name' => 'mcp:bricklayer:product-list', 'status' => 'running', 'message' => 'Listing product...']],
-            ['tool_status', ['name' => 'mcp:bricklayer:product-list', 'status' => 'done', 'duration_ms' => 12]],
-            ['tool_status', ['name' => 'sales_data', 'status' => 'running', 'message' => 'Fetching recent orders...']],
-            ['text', ['text' => 'hi']],
-        ], $this->emitted);
-    }
-
-    #[Test]
-    public function severalCallsInFlightKeepTheGenericNameRatherThanGuessing(): void
-    {
-        $wrapped = (new ToolEventRelabeler())->wrap($this->recorder());
-
-        $wrapped('tool_call', ['id' => 'a', 'name' => 'mcp', 'input' => ['action' => 'bricklayer:category-tree']]);
-        $wrapped('tool_call', ['id' => 'b', 'name' => 'mcp', 'input' => ['action' => 'magerun:cache_list']]);
-        // Mago denied call "a": it emits no status for it, so the next status belongs to "b".
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'running', 'message' => 'Running mcp...']);
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'done']);
-
-        self::assertSame('mcp:bricklayer:category-tree', $this->emitted[0][1]['name'], 'tags are always exact');
-        self::assertSame('mcp:magerun:cache_list', $this->emitted[1][1]['name']);
-        self::assertSame('mcp', $this->emitted[2][1]['name'], 'ambiguous: never guess a label');
-        self::assertSame('Running mcp...', $this->emitted[2][1]['message']);
-        self::assertSame('mcp', $this->emitted[3][1]['name']);
-    }
-
-    #[Test]
-    public function aFailureMessageIsNeverRewrittenAndNoQueueMeansNoLabel(): void
-    {
-        $wrapped = (new ToolEventRelabeler())->wrap($this->recorder());
-
-        $wrapped('tool_call', ['id' => 'a', 'name' => 'mcp', 'input' => ['action' => 'bricklayer:category-tree']]);
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'running', 'message' => 'Running mcp...']);
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'failed', 'message' => 'boom']);
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'running', 'message' => 'Running mcp...']);
-
-        self::assertSame('mcp:bricklayer:category-tree', $this->emitted[1][1]['name']);
-        self::assertSame('mcp:bricklayer:category-tree', $this->emitted[2][1]['name']);
-        self::assertSame('boom', $this->emitted[2][1]['message']);
-        self::assertSame('mcp', $this->emitted[3][1]['name'], 'nothing queued: the name stays');
-    }
-
-    #[Test]
-    public function unparsableActionsKeepTheToolName(): void
-    {
-        $wrapped = (new ToolEventRelabeler())->wrap($this->recorder());
-
-        $wrapped('tool_call', ['id' => 'a', 'name' => 'mcp', 'input' => ['action' => 'none']]);
-        $wrapped('tool_call', ['id' => 'b', 'name' => 'mcp', 'input' => 'garbage']);
-
-        self::assertSame('mcp', $this->emitted[0][1]['name']);
-        self::assertSame('mcp', $this->emitted[1][1]['name']);
-    }
-
-    #[Test]
-    public function confirmedCallsPreSeedTheQueueWithSelectedCallsOnly(): void
-    {
-        $confirmed = [
-            ['id' => 'x', 'name' => 'mcp', 'input' => ['action' => 'bricklayer:product-delete', 'arguments' => ['sku' => 'A']]],
-            ['id' => 'y', 'name' => 'mcp', 'input' => ['action' => 'bricklayer:category-delete', 'arguments' => ['categoryId' => 3]]],
-            ['id' => 'z', 'name' => 'cms_data', 'input' => ['action' => 'update_page']],
+        $servers = new FakeServerRepository();
+        $client = new FakeMcpClient();
+        $log = new FakeLogger();
+        $client->tools['demo'] = [
+            ['name' => 'product-list', 'description' => 'List products.', 'inputSchema' => ['type' => 'object']],
+            ['name' => 'code-runner', 'description' => 'Run PHP.', 'inputSchema' => ['type' => 'object']],
         ];
-        // The admin left "x" unticked: Mago runs only "y" and emits a status only for it.
-        $wrapped = (new ToolEventRelabeler())->wrap($this->recorder(), $confirmed, ['y', 'z']);
+        $servers->add('demo', true);
+        $config = new Config(new FakeScopeConfig([
+            'mago/mcp/enabled' => '1',
+            'mago/mcp/process_timeout' => '5',
+            'mago/mcp/cache_lifetime' => '60',
+            'mago/mcp/max_result_chars' => '16000',
+        ]));
+        $json = new Json();
+        $errorLogger = new ErrorLogger($log, $json);
+        $catalog = new ToolCatalog($servers, $client, new FakeCache(), $config, new ModeClassifier(), $errorLogger);
+        $executor = new Executor(
+            $catalog,
+            $client,
+            $config,
+            new DebugLogger($log, $json),
+            $errorLogger,
+            $this->createStub(MagoConfig::class)
+        );
 
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'running', 'message' => 'Running mcp...']);
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'done']);
+        return new SkillRegistry($catalog, $executor, $errorLogger, new ModeClassifier());
+    }
 
-        self::assertSame('mcp:bricklayer:category-delete', $this->emitted[0][1]['name']);
-        self::assertSame('Deleting category...', $this->emitted[0][1]['message']);
-        self::assertSame('mcp:bricklayer:category-delete', $this->emitted[1][1]['name']);
-
-        $this->emitted = [];
-        $wrapped = (new ToolEventRelabeler())->wrap($this->recorder(), $confirmed, null);
-        $wrapped('tool_status', ['name' => 'mcp', 'status' => 'running', 'message' => 'Running mcp...']);
-        self::assertSame('mcp', $this->emitted[0][1]['name'], 'two selected mcp calls: ambiguous, stay generic');
+    private function relabeler(): ToolEventRelabeler
+    {
+        return new ToolEventRelabeler($this->registry());
     }
 
     #[Test]
-    public function statusLinesReadLikeMagosOwn(): void
+    public function anMcpSkillsRunningFallbackBecomesAPlainLanguagePhrase(): void
     {
-        $wrapped = (new ToolEventRelabeler())->wrap($this->recorder());
-        foreach (['bricklayer:order-get', 'magerun:sys_cron_run', 'bricklayer:application-info', 'bricklayer:category-assign-products'] as $action) {
-            $wrapped('tool_call', ['id' => $action, 'name' => 'mcp', 'input' => ['action' => $action]]);
-            $wrapped('tool_status', ['name' => 'mcp', 'status' => 'running', 'message' => 'Running mcp...']);
-            $wrapped('tool_status', ['name' => 'mcp', 'status' => 'done']);
-        }
-        $messages = array_values(array_map(static fn ($e) => $e[1]['message'], array_filter($this->emitted, static fn ($e) => $e[0] === 'tool_status' && $e[1]['status'] === 'running')));
+        $wrapped = $this->relabeler()->wrap($this->recorder());
 
-        self::assertSame(['Getting order...', 'Running sys cron...', 'Running application info...', 'Assigning category products...'], $messages);
-        self::assertSame('mcp:magerun:sys_cron_run', $this->emitted[3][1]['name']);
+        $wrapped('tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Running demo__product-list...']);
+
+        self::assertSame(
+            [['tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Listing product...']]],
+            $this->emitted
+        );
+    }
+
+    #[Test]
+    public function aSkillWithNoKnownVerbFallsBackToRunningTheWords(): void
+    {
+        $wrapped = $this->relabeler()->wrap($this->recorder());
+
+        $wrapped('tool_status', ['name' => 'demo__code-runner', 'status' => 'running', 'message' => 'Running demo__code-runner...']);
+
+        self::assertSame('Running code runner...', $this->emitted[0][1]['message']);
+    }
+
+    #[Test]
+    public function aMagoToolsRunningStatusPassesThroughUntouched(): void
+    {
+        $wrapped = $this->relabeler()->wrap($this->recorder());
+
+        $wrapped('tool_status', ['name' => 'sales_data', 'status' => 'running', 'message' => 'Running sales_data...']);
+
+        self::assertSame(
+            [['tool_status', ['name' => 'sales_data', 'status' => 'running', 'message' => 'Running sales_data...']]],
+            $this->emitted
+        );
+    }
+
+    #[Test]
+    public function aToolCallEventPassesThroughUntouched(): void
+    {
+        $wrapped = $this->relabeler()->wrap($this->recorder());
+
+        $wrapped('tool_call', ['id' => 'c1', 'name' => 'demo__product-list', 'input' => ['sku' => 'A']]);
+
+        self::assertSame(
+            [['tool_call', ['id' => 'c1', 'name' => 'demo__product-list', 'input' => ['sku' => 'A']]]],
+            $this->emitted
+        );
+    }
+
+    #[Test]
+    public function aRunningStatusWithACustomMessageIsNeverRewritten(): void
+    {
+        $wrapped = $this->relabeler()->wrap($this->recorder());
+
+        $wrapped('tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Almost there...']);
+
+        self::assertSame('Almost there...', $this->emitted[0][1]['message']);
+    }
+
+    #[Test]
+    public function aDoneStatusPassesThroughUntouched(): void
+    {
+        $wrapped = $this->relabeler()->wrap($this->recorder());
+
+        $wrapped('tool_status', ['name' => 'demo__product-list', 'status' => 'done', 'duration_ms' => 12]);
+
+        self::assertSame(
+            [['tool_status', ['name' => 'demo__product-list', 'status' => 'done', 'duration_ms' => 12]]],
+            $this->emitted
+        );
+    }
+
+    #[Test]
+    public function aFailingSkillLookupLeavesTheStatusLineAsMagoSentIt(): void
+    {
+        $wrapped = (new ToolEventRelabeler(new ThrowingSkillRegistry()))->wrap($this->recorder());
+
+        $wrapped('tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Running demo__product-list...']);
+        $wrapped('tool_status', ['name' => 'sales_data', 'status' => 'running', 'message' => 'Running sales_data...']);
+
+        self::assertSame(
+            [
+                ['tool_status', ['name' => 'demo__product-list', 'status' => 'running', 'message' => 'Running demo__product-list...']],
+                ['tool_status', ['name' => 'sales_data', 'status' => 'running', 'message' => 'Running sales_data...']],
+            ],
+            $this->emitted
+        );
     }
 }

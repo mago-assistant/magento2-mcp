@@ -68,12 +68,57 @@ final class ModeClassifierTest extends TestCase
     }
 
     #[Test]
-    public function validatesModes(): void
+    public function flagsPersonalDataByWholeSegmentsOnly(): void
     {
         $classifier = new ModeClassifier();
-        self::assertTrue($classifier->isValidMode('read'));
-        self::assertTrue($classifier->isValidMode('disabled'));
-        self::assertFalse($classifier->isValidMode('READ'));
-        self::assertFalse($classifier->isValidMode(''));
+
+        foreach (['customer-get', 'order-list', 'invoice-create', 'shipment_list', 'creditmemo-list',
+            'customer-address-update', 'subscriber-export', 'cart-get', 'review-list', 'user-info'] as $tool) {
+            self::assertTrue($classifier->isPersonalData($tool), $tool);
+        }
+        foreach (['product-get', 'preorder-list', 'url-rewrites', 'cache-flush', 'sys_cron_run', ''] as $tool) {
+            self::assertFalse($classifier->isPersonalData($tool), $tool);
+        }
+    }
+
+    #[Test]
+    public function namesEndingInAReadWordButCarryingAWriteVerbAreWrites(): void
+    {
+        $classifier = new ModeClassifier();
+
+        foreach (['admin_user_change-status', 'mark_all_notifications_read', 'export_orders',
+            'search_and_replace', 'toggle-status', 'enable-module', 'refund-order', 'close_issue'] as $tool) {
+            self::assertSame(ModeClassifier::WRITE, $classifier->classify($tool), $tool);
+        }
+        self::assertSame(ModeClassifier::READ, $classifier->classify('order-status'), 'no verb, ends in a read noun');
+    }
+
+    #[Test]
+    public function destructiveVerbsBeyondCrudAreWrites(): void
+    {
+        $classifier = new ModeClassifier();
+
+        foreach (['erase-customer-addresses', 'wipe-orders', 'revoke-token', 'restore-backup'] as $tool) {
+            self::assertSame(ModeClassifier::WRITE, $classifier->classify($tool), $tool);
+        }
+        self::assertSame(ModeClassifier::READ, $classifier->classify('order-list'));
+        self::assertSame(ModeClassifier::READ, $classifier->classify('cms-block-get'), 'block is a noun, not a write word');
+    }
+
+    #[Test]
+    public function recognisesExecutionSurfacesByWholeSegments(): void
+    {
+        $classifier = new ModeClassifier();
+
+        foreach (['code-runner', 'batch-execute', 'execute_sql', 'db_console', 'browser_evaluate', 'bash',
+            'generate-module', 'reinitialize', 'setup_upgrade', 'run_command', 'php-eval'] as $tool) {
+            self::assertTrue($classifier->isExecutionSurface($tool), $tool);
+        }
+        foreach (['order-cancel', 'product-update', 'db_query', 'coupon-code-list', 'deploy_mode_show',
+            'drop_table', 'product-list', ''] as $tool) {
+            self::assertFalse($classifier->isExecutionSurface($tool), $tool);
+        }
+        self::assertTrue($classifier->isIrreversible('drop_table'));
+        self::assertTrue($classifier->isIrreversible('truncate-logs'));
     }
 }

@@ -28,13 +28,13 @@ final class ServerScannerTest extends TestCase
     #[Test]
     public function composerWinsOnNameCollision(): void
     {
-        $fromComposer = new DiscoveredServer('bricklayer', ['php', 'vendor/bin/bricklayer-mcp'], [], null, DiscoveredServer::SOURCE_COMPOSER);
-        $fromJson = new DiscoveredServer('bricklayer', ['php', '/var/www/magento/vendor/bin/bricklayer-mcp'], [], '/var/www/magento', DiscoveredServer::SOURCE_MCP_JSON);
+        $fromComposer = new DiscoveredServer('widget', ['php', 'vendor/bin/widget-mcp'], [], null, DiscoveredServer::SOURCE_COMPOSER);
+        $fromJson = new DiscoveredServer('widget', ['php', '/var/www/magento/vendor/bin/widget-mcp'], [], '/var/www/magento', DiscoveredServer::SOURCE_MCP_JSON);
         $other = new DiscoveredServer('other', ['node', 'x.js'], [], null, DiscoveredServer::SOURCE_MCP_JSON);
 
         $servers = $this->scanner([$fromComposer], [$fromJson, $other], true)->scan();
 
-        self::assertSame(['bricklayer', 'other'], array_map(static fn ($s) => $s->name, $servers));
+        self::assertSame(['widget', 'other'], array_map(static fn ($s) => $s->name, $servers));
         self::assertSame(DiscoveredServer::SOURCE_COMPOSER, $servers[0]->source);
     }
 

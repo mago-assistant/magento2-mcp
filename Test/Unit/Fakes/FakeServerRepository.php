@@ -13,11 +13,11 @@ final class FakeServerRepository implements ServerRepositoryInterface
     /** @var array<string,array<string,mixed>> */
     public array $rows = [];
 
-    public function add(string $name, bool $enabled, array $overrides = [], string $source = 'composer'): void
+    public function add(string $name, bool $enabled, string $source = 'composer'): void
     {
         $this->rows[$name] = ['server_id' => count($this->rows) + 1, 'name' => $name, 'command' => ['php', $name],
-            'env' => [], 'cwd' => null, 'source' => $source, 'enabled' => $enabled, 'missing' => false,
-            'tool_overrides' => $overrides, 'last_error' => null];
+            'env' => [], 'cwd' => null, 'source' => $source, 'enabled' => $enabled,
+            'missing' => false, 'last_error' => null];
     }
 
     public function getAll(): array
@@ -43,11 +43,6 @@ final class FakeServerRepository implements ServerRepositoryInterface
     public function setEnabled(string $name, bool $enabled): void
     {
         $this->rows[$name]['enabled'] = $enabled;
-    }
-
-    public function setToolOverrides(string $name, array $overrides): void
-    {
-        $this->rows[$name]['tool_overrides'] = $overrides;
     }
 
     public function setLastError(string $name, ?string $error): void

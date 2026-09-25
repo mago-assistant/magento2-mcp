@@ -8,6 +8,7 @@
             "cwd": true,
             "source": true,
             "enabled": true,
+            "policy": true,
             "missing": true,
             "tool_overrides": true,
             "last_error": true,

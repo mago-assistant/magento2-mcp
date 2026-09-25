@@ -55,24 +55,18 @@ class Repository implements ServerRepositoryInterface
             'source' => $row['source'] ?? DiscoveredServer::SOURCE_MANUAL,
             'enabled' => (int)(bool)($row['enabled'] ?? false),
             'missing' => (int)(bool)($row['missing'] ?? false),
-            'tool_overrides' => $this->json->serialize($row['tool_overrides'] ?? []),
             'last_error' => $row['last_error'] ?? null,
         ];
         $this->resourceConnection->getConnection()->insertOnDuplicate(
             $this->table(),
             $data,
-            ['command', 'env', 'cwd', 'source', 'enabled', 'missing', 'tool_overrides', 'last_error']
+            ['command', 'env', 'cwd', 'source', 'enabled', 'missing', 'last_error']
         );
     }
 
     public function setEnabled(string $name, bool $enabled): void
     {
         $this->update($name, ['enabled' => (int)$enabled]);
-    }
-
-    public function setToolOverrides(string $name, array $overrides): void
-    {
-        $this->update($name, ['tool_overrides' => $this->json->serialize($overrides)]);
     }
 
     public function setLastError(string $name, ?string $error): void
@@ -118,11 +112,17 @@ class Repository implements ServerRepositoryInterface
     }
 
     /**
+     * The name is normalised as save() and getByName() normalise it, so every set*() acts on the stored row.
+     *
      * @param array<string,mixed> $data
      */
     private function update(string $name, array $data): void
     {
-        $this->resourceConnection->getConnection()->update($this->table(), $data, ['name = ?' => $name]);
+        $this->resourceConnection->getConnection()->update(
+            $this->table(),
+            $data,
+            ['name = ?' => DiscoveredServer::normaliseName($name)]
+        );
     }
 
     /**
@@ -134,7 +134,6 @@ class Repository implements ServerRepositoryInterface
         $row['server_id'] = (int)$row['server_id'];
         $row['command'] = $this->decodeList($row['command'] ?? null);
         $row['env'] = $this->decodeMap($row['env'] ?? null);
-        $row['tool_overrides'] = $this->decodeMap($row['tool_overrides'] ?? null);
         $row['enabled'] = (bool)$row['enabled'];
         $row['missing'] = (bool)$row['missing'];
 

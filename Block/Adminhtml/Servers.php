@@ -9,7 +9,6 @@ namespace MagoAssistant\Mcp\Block\Adminhtml;
 use Magento\Backend\Block\Template;
 use Magento\Backend\Block\Template\Context;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
-use MagoAssistant\Mcp\Service\Catalog\CatalogEntry;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 
 class Servers extends Template
@@ -24,8 +23,8 @@ class Servers extends Template
     }
 
     /**
-     * Rows plus 'tools_enabled' and 'tools_total'. Tool lists are read first so a fresh last_error
-     * written by a failed fetch is in the rows that are returned.
+     * Rows plus 'tools_total'. Tool lists are read first so a fresh last_error written by a failed
+     * fetch is in the rows that are returned.
      *
      * @return array<int,array<string,mixed>>
      */
@@ -33,29 +32,15 @@ class Servers extends Template
     {
         $counts = [];
         foreach ($this->servers->getEnabled() as $row) {
-            $entries = $this->catalog->entriesForServer($row['name']);
-            $counts[$row['name']] = [
-                count($entries),
-                count(array_filter($entries, static fn (CatalogEntry $e): bool => $e->isCallable())),
-            ];
+            $counts[$row['name']] = count($this->catalog->entriesForServer($row['name']));
         }
         $rows = [];
         foreach ($this->servers->getAll() as $row) {
-            [$row['tools_total'], $row['tools_enabled']] = $counts[$row['name']] ?? [0, 0];
+            $row['tools_total'] = $counts[$row['name']] ?? 0;
             $rows[] = $row;
         }
 
         return $rows;
-    }
-
-    public function getEditUrl(string $name): string
-    {
-        return $this->getUrl('mago_mcp/servers/edit', ['name' => $name]);
-    }
-
-    public function getNewUrl(): string
-    {
-        return $this->getUrl('mago_mcp/servers/edit');
     }
 
     public function getToggleUrl(): string

@@ -9,7 +9,7 @@ namespace MagoAssistant\Mcp\Api;
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
 
 /**
- * Stored MCP servers as plain arrays with command, env and tool_overrides already decoded.
+ * Stored MCP servers as plain arrays with command and env already decoded.
  *
  * @api
  */
@@ -32,9 +32,6 @@ interface ServerRepositoryInterface
     public function save(array $row): void;
 
     public function setEnabled(string $name, bool $enabled): void;
-
-    /** @param array<string,string> $overrides */
-    public function setToolOverrides(string $name, array $overrides): void;
 
     public function setLastError(string $name, ?string $error): void;
 

@@ -51,7 +51,7 @@ final class McpJsonSourceTest extends TestCase
     public function readsStdioEntriesAndUnwrapsDocker(): void
     {
         file_put_contents($this->root . '/.mcp.json', json_encode(['mcpServers' => [
-            'Magento Bricklayer' => ['command' => 'docker', 'args' => ['exec', '-i', '-w', '/app', 'php', 'php', 'bin/x-mcp']],
+            'Magento Widget' => ['command' => 'docker', 'args' => ['exec', '-i', '-w', '/app', 'php', 'php', 'bin/x-mcp']],
             'plain' => ['command' => 'node', 'args' => ['srv.js'], 'env' => ['K' => 'v']],
             'remote' => ['type' => 'http', 'url' => 'https://example.test/mcp'],
         ]]));
@@ -59,7 +59,7 @@ final class McpJsonSourceTest extends TestCase
         $servers = $this->source()->discover();
 
         self::assertCount(2, $servers);
-        self::assertSame('bricklayer', $servers[0]->name, 'the magento- prefix is stripped like the Composer name');
+        self::assertSame('widget', $servers[0]->name, 'the magento- prefix is stripped like the Composer name');
         self::assertSame(['php', 'bin/x-mcp'], $servers[0]->command);
         self::assertSame('/app', $servers[0]->cwd);
         self::assertSame(DiscoveredServer::SOURCE_MCP_JSON, $servers[0]->source);
