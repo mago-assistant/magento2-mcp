@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="MagoAssistant\Mago\Service\Tool\ToolRegistry">
+        <plugin name="magoassistant_mcp_add_tools" type="MagoAssistant\Mcp\Plugin\AddMcpToolsToRegistry"/>
+    </type>
+
+    <!-- MCP servers: add a ServerInterface item (e.g. a ConfiguredServer virtualType) to expose its tools -->
+    <type name="MagoAssistant\Mcp\Service\ToolProvider">
+        <arguments>
+            <argument name="servers" xsi:type="array">
+                <item name="custom" xsi:type="object">MagoAssistant\Mcp\Service\ConfiguredServer</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <type name="Magento\Framework\Console\CommandListInterface">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="mago_mcp_tools" xsi:type="object">MagoAssistant\Mcp\Console\Command\McpTools</item>
+            </argument>
+        </arguments>
+    </type>
+</config>
