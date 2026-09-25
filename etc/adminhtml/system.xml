@@ -8,7 +8,7 @@
             <group id="custom" translate="label comment" type="text" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>MCP Server</label>
                 <comment><![CDATA[Let the assistant use the tools of a remote MCP server (Streamable HTTP). Run <code>bin/magento mago:mcp:tools --refresh</code> to check the connection. Each remote tool appears on the Skills page as <code>mcp_custom__&lt;tool&gt;</code>.]]></comment>
-                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
@@ -67,7 +67,7 @@
                         <field id="enabled">1</field>
                     </depends>
                 </field>
-                <field id="output_public" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
+                <field id="output_public" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
                     <label>Output Contains No Personal Data</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     <comment><![CDATA[Only set to Yes when the server never returns personal data: its output then goes to the AI provider as-is. With No, the privacy filter strips every field and the tools return nothing useful.]]></comment>
@@ -75,7 +75,7 @@
                         <field id="enabled">1</field>
                     </depends>
                 </field>
-                <field id="timeout" translate="label" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
+                <field id="timeout" translate="label" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
                     <label>Timeout (seconds)</label>
                     <validate>validate-digits validate-greater-than-zero</validate>
                     <depends>
@@ -86,7 +86,7 @@
             <group id="rumvision" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>RUMvision MCP</label>
                 <comment><![CDATA[Core Web Vitals and real-user monitoring data from <a href="https://www.rumvision.com/help-center/apis/mcp/introduction/" target="_blank" rel="noopener">RUMvision</a>. Each admin user connects their own RUMvision account; MCP access must be enabled for your organisation and role in RUMvision. The tools appear as <code>mcp_rumvision__&lt;tool&gt;</code>.]]></comment>
-                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
@@ -127,7 +127,7 @@
                         <field id="enabled">1</field>
                     </depends>
                 </field>
-                <field id="output_public" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
+                <field id="output_public" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
                     <label>Output Contains No Personal Data</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     <comment><![CDATA[Only set to Yes when the server never returns personal data: its output then goes to the AI provider as-is. With No, the privacy filter strips every field and the tools return nothing useful.]]></comment>
@@ -135,7 +135,7 @@
                         <field id="enabled">1</field>
                     </depends>
                 </field>
-                <field id="timeout" translate="label" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
+                <field id="timeout" translate="label" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
                     <label>Timeout (seconds)</label>
                     <validate>validate-digits validate-greater-than-zero</validate>
                     <depends>
