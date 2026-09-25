@@ -191,4 +191,21 @@ final class SkillRegistryTest extends TestCase
         );
         self::assertCount(0, $unusable);
     }
+
+    #[Test]
+    public function serverInstructionsAreSentOncePerRequest(): void
+    {
+        $this->transport->instructions['demo'] = 'Be brief.';
+        $registry = $this->registry();
+        $first = $registry->byName('mcp_demo__product_list');
+        $second = $registry->byName('mcp_demo__product_delete');
+
+        self::assertStringContainsString('## Server demo', $first->getInstructions());
+        self::assertStringNotContainsString(
+            '## Server demo',
+            $second->getInstructions(),
+            'the second skill of the same server in one request skips the server block'
+        );
+        self::assertStringContainsString('## mcp_demo__product_delete', $second->getInstructions(), 'its own block still goes');
+    }
 }

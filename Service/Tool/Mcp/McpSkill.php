@@ -27,12 +27,20 @@ class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingTo
     private const DESCRIPTION_LENGTH = 300;
     private const SERVER_INSTRUCTIONS_LENGTH = 2000;
 
+    private readonly InstructionGate $gate;
+
+    /**
+     * @param InstructionGate|null $gate Shared by every skill of one request, so a server's instructions go
+     *        once; a skill built alone gets its own
+     */
     public function __construct(
         private readonly CatalogEntry $entry,
         private readonly Executor $executor,
         private readonly string $serverInstructions = '',
-        private readonly bool $executionSurface = false
+        private readonly bool $executionSurface = false,
+        ?InstructionGate $gate = null
     ) {
+        $this->gate = $gate ?? new InstructionGate();
     }
 
     /**
@@ -154,7 +162,7 @@ class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingTo
     public function getInstructions(): string
     {
         $blocks = [];
-        if (trim($this->serverInstructions) !== '') {
+        if (trim($this->serverInstructions) !== '' && $this->gate->claim($this->entry->server)) {
             $blocks[] = sprintf(
                 "## Server %s\n%s",
                 $this->entry->server,

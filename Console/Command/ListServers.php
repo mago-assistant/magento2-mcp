@@ -32,7 +32,7 @@ class ListServers extends Command
     protected function configure(): void
     {
         $this->setName('mago:mcp:list')
-            ->setDescription('List MCP servers, or the tools of one server with their type.')
+            ->setDescription('List MCP servers (source, transport, auth, state), or the tools of one server with their type.')
             ->addArgument('server', InputArgument::OPTIONAL, 'Server name to show tools for');
         parent::configure();
     }
@@ -50,11 +50,15 @@ class ListServers extends Command
                 // Values from the database or a server's stderr are escaped so a stray "<" cannot
                 // open or close console formatting tags.
                 $output->writeln(sprintf(
-                    '%-20s %-9s %-8s %s',
+                    '%-20s %-9s %-6s %-6s %-8s %s',
                     OutputFormatter::escape((string)$row['name']),
                     OutputFormatter::escape((string)$row['source']),
+                    OutputFormatter::escape((string)$row['transport']),
+                    OutputFormatter::escape((string)$row['auth_type']),
                     $row['enabled'] ? 'enabled' : 'disabled',
-                    OutputFormatter::escape(implode(' ', $row['command']))
+                    OutputFormatter::escape(
+                        $row['transport'] === 'http' ? (string)$row['url'] : implode(' ', $row['command'])
+                    )
                 ));
                 if ($row['last_error']) {
                     $output->writeln('    <error>' . OutputFormatter::escape((string)$row['last_error']) . '</error>');

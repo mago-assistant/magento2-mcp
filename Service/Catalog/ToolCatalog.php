@@ -137,8 +137,13 @@ class ToolCatalog
         }
         $entries = [];
         $definition = $this->definitions->get($name);
+        // A token-cost filter, not a permission: a name not on the list is not a skill at all.
+        $allowed = array_map('strval', is_array($row['allowed_tools'] ?? null) ? $row['allowed_tools'] : []);
         foreach ($this->fetched($row)['tools'] as $tool) {
             $toolName = (string)$tool['name'];
+            if ($allowed !== [] && !in_array($toolName, $allowed, true)) {
+                continue;
+            }
             $annotations = is_array($tool['annotations'] ?? null) ? $tool['annotations'] : [];
             [$mode, $origin] = $this->modeOf($toolName, $annotations);
             // A read tool is never irreversible, whatever IRREVERSIBLE_WORDS or destructiveHint says.

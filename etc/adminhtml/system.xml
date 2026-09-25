@@ -7,7 +7,7 @@
                 <label>MCP Servers</label>
                 <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
                     <label>Enabled</label>
-                    <comment>Expose enabled MCP servers to the assistant as the "mcp" skill.</comment>
+                    <comment>Expose every tool of an enabled MCP server to the assistant as a skill.</comment>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
                 <field id="scan_mcp_json" translate="label comment" type="select" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
@@ -16,8 +16,8 @@
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
                 <field id="process_timeout" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
-                    <label>Process timeout (seconds)</label>
-                    <comment>How long one tool call may take before the server process is killed.</comment>
+                    <label>Call timeout (seconds)</label>
+                    <comment>How long one tool call may take, over stdio or HTTP, before it is abandoned; a server row may set its own.</comment>
                     <validate>validate-digits validate-greater-than-zero</validate>
                 </field>
                 <field id="cache_lifetime" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">

@@ -298,6 +298,16 @@ final class ToolCatalogTest extends TestCase
     }
 
     #[Test]
+    public function allowedToolsFiltersAndIgnoresUnknownNames(): void
+    {
+        $this->servers->add('demo', true, 'composer', ['allowed_tools' => ['product-list', 'no-such-tool']]);
+
+        $tools = array_map(static fn ($e) => $e->tool, $this->catalog()->entries());
+
+        self::assertSame(['product-list'], $tools);
+    }
+
+    #[Test]
     public function serverConfigResolvesEnabledServersOnly(): void
     {
         $this->servers->add('demo', true);

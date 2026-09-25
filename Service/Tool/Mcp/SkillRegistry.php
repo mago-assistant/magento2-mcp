@@ -38,13 +38,15 @@ class SkillRegistry
     {
         if ($this->skills === null) {
             $instructions = $this->catalog->serverInstructions();
+            $gate = new InstructionGate();
             $skills = [];
             foreach ($this->catalog->entries() as $entry) {
                 $skill = new McpSkill(
                     $entry,
                     $this->executor,
                     $instructions[$entry->server] ?? '',
-                    $this->classifier->isExecutionSurface($entry->tool)
+                    $this->classifier->isExecutionSurface($entry->tool),
+                    $gate
                 );
                 $name = $skill->getName();
                 if (preg_match(self::NAME_PATTERN, $name) !== 1) {
