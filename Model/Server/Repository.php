@@ -11,6 +11,7 @@ use Magento\Framework\Serialize\Serializer\Json;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
 use MagoAssistant\Mcp\Service\Discovery\ServerMerger;
+use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
 
 class Repository implements ServerRepositoryInterface
 {
@@ -52,6 +53,16 @@ class Repository implements ServerRepositoryInterface
             'command' => $this->json->serialize(array_values($row['command'] ?? [])),
             'env' => $this->json->serialize($row['env'] ?? []),
             'cwd' => $row['cwd'] ?? null,
+            'label' => isset($row['label']) && $row['label'] !== '' ? (string)$row['label'] : null,
+            'transport' => (string)($row['transport'] ?? ServerConfig::TRANSPORT_STDIO),
+            'url' => isset($row['url']) && $row['url'] !== '' ? (string)$row['url'] : null,
+            'auth_type' => (string)($row['auth_type'] ?? ServerConfig::AUTH_NONE),
+            'allowed_tools' => $this->json->serialize(array_values($row['allowed_tools'] ?? [])),
+            'timeout' => isset($row['timeout']) && (int)$row['timeout'] > 0 ? (int)$row['timeout'] : null,
+            'output_public' => (int)(bool)($row['output_public'] ?? false),
+            'replaces_skill' => isset($row['replaces_skill']) && $row['replaces_skill'] !== ''
+                ? (string)$row['replaces_skill']
+                : null,
             'source' => $row['source'] ?? DiscoveredServer::SOURCE_MANUAL,
             'enabled' => (int)(bool)($row['enabled'] ?? false),
             'missing' => (int)(bool)($row['missing'] ?? false),
@@ -60,7 +71,8 @@ class Repository implements ServerRepositoryInterface
         $this->resourceConnection->getConnection()->insertOnDuplicate(
             $this->table(),
             $data,
-            ['command', 'env', 'cwd', 'source', 'enabled', 'missing', 'last_error']
+            ['command', 'env', 'cwd', 'label', 'transport', 'url', 'auth_type', 'allowed_tools', 'timeout',
+                'output_public', 'replaces_skill', 'source', 'enabled', 'missing', 'last_error']
         );
     }
 
@@ -134,8 +146,18 @@ class Repository implements ServerRepositoryInterface
         $row['server_id'] = (int)$row['server_id'];
         $row['command'] = $this->decodeList($row['command'] ?? null);
         $row['env'] = $this->decodeMap($row['env'] ?? null);
+        $row['label'] = (string)($row['label'] ?? '');
+        $row['transport'] = (string)($row['transport'] ?? ServerConfig::TRANSPORT_STDIO);
+        $row['url'] = (string)($row['url'] ?? '');
+        $row['auth_type'] = (string)($row['auth_type'] ?? ServerConfig::AUTH_NONE);
+        $row['allowed_tools'] = $this->decodeList($row['allowed_tools'] ?? null);
+        $row['timeout'] = isset($row['timeout']) && (int)$row['timeout'] > 0 ? (int)$row['timeout'] : null;
+        $row['output_public'] = (bool)($row['output_public'] ?? false);
+        $row['replaces_skill'] = (string)($row['replaces_skill'] ?? '');
         $row['enabled'] = (bool)$row['enabled'];
         $row['missing'] = (bool)$row['missing'];
+        // Plan 2 decrypts it; until then the token never leaves the repository.
+        unset($row['bearer_token']);
 
         return $row;
     }

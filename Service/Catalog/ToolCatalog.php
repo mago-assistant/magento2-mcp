@@ -77,7 +77,7 @@ class ToolCatalog
     {
         $row = $this->servers->getByName($name);
 
-        return $row !== null && $row['enabled'] ? ServerConfig::fromRow($row) : null;
+        return $row !== null && $row['enabled'] ? ServerConfig::fromRow($row, $this->config->getProcessTimeout()) : null;
     }
 
     /**
@@ -272,7 +272,8 @@ class ToolCatalog
             }
         }
         try {
-            $result = $this->client->listTools(ServerConfig::fromRow($row), $this->config->getProcessTimeout());
+            $timeout = $this->config->getProcessTimeout();
+            $result = $this->client->listTools(ServerConfig::fromRow($row, $timeout), $timeout);
         } catch (McpException $e) {
             $this->errorLogger->addLog('MCP tools/list', ['server' => $name, 'error' => $e->getMessage()]);
             $this->servers->setLastError($name, $e->getMessage());

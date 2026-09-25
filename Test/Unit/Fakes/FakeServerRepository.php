@@ -13,11 +13,15 @@ final class FakeServerRepository implements ServerRepositoryInterface
     /** @var array<string,array<string,mixed>> */
     public array $rows = [];
 
-    public function add(string $name, bool $enabled, string $source = 'composer'): void
+    /**
+     * @param array<string,mixed> $extra columns to override, e.g. ['output_public' => true, 'label' => 'Demo']
+     */
+    public function add(string $name, bool $enabled, string $source = 'composer', array $extra = []): void
     {
-        $this->rows[$name] = ['server_id' => count($this->rows) + 1, 'name' => $name, 'command' => ['php', $name],
-            'env' => [], 'cwd' => null, 'source' => $source, 'enabled' => $enabled,
-            'missing' => false, 'last_error' => null];
+        $this->rows[$name] = $extra + ['server_id' => count($this->rows) + 1, 'name' => $name, 'command' => ['php', $name],
+            'env' => [], 'cwd' => null, 'label' => '', 'transport' => 'stdio', 'url' => '', 'auth_type' => 'none',
+            'allowed_tools' => [], 'timeout' => null, 'output_public' => false, 'replaces_skill' => '',
+            'source' => $source, 'enabled' => $enabled, 'missing' => false, 'last_error' => null];
     }
 
     public function getAll(): array
