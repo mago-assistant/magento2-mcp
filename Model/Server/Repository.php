@@ -101,8 +101,10 @@ class Repository implements ServerRepositoryInterface
             $existing[$row['name']] = $row;
         }
         $plan = $this->merger->plan($existing, $discovered);
+        $names = [];
         foreach ($plan['insert'] as $server) {
             $this->save($server->toRow() + ['enabled' => false]);
+            $names[] = $server->name;
         }
         foreach ($plan['update'] as $server) {
             // save() is an upsert: every storable column follows the source, the row keeps its state.
@@ -111,6 +113,7 @@ class Repository implements ServerRepositoryInterface
                 'enabled' => (bool)($existing[$server->name]['enabled'] ?? false),
                 'last_error' => $existing[$server->name]['last_error'] ?? null,
             ]);
+            $names[] = $server->name;
         }
         foreach ($plan['missing'] as $name) {
             $this->update($name, ['missing' => 1]);
@@ -120,6 +123,7 @@ class Repository implements ServerRepositoryInterface
             'inserted' => count($plan['insert']),
             'updated' => count($plan['update']),
             'missing' => count($plan['missing']),
+            'names' => $names,
         ];
     }
 

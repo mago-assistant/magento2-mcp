@@ -11,6 +11,7 @@ use MagoAssistant\Mago\Logger\ErrorLogger;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Model\Cache\Type\McpTools;
 use MagoAssistant\Mcp\Model\Config;
+use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
 use MagoAssistant\Mcp\Service\Mcp\McpException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
@@ -40,7 +41,8 @@ class ToolCatalog
         private readonly FrontendInterface $cache,
         private readonly Config $config,
         private readonly ModeClassifier $classifier,
-        private readonly ErrorLogger $errorLogger
+        private readonly ErrorLogger $errorLogger,
+        private readonly DefinitionRegistry $definitions
     ) {
     }
 
@@ -78,7 +80,7 @@ class ToolCatalog
         $row = $this->servers->getByName($name);
 
         return $row !== null && $row['enabled']
-            ? ServerConfig::fromRow($row, $this->config->getProcessTimeout())
+            ? ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitions->get($name))
             : null;
     }
 
@@ -134,6 +136,7 @@ class ToolCatalog
             return $this->entriesMemo[$name];
         }
         $entries = [];
+        $definition = $this->definitions->get($name);
         foreach ($this->fetched($row)['tools'] as $tool) {
             $toolName = (string)$tool['name'];
             $annotations = is_array($tool['annotations'] ?? null) ? $tool['annotations'] : [];
@@ -151,7 +154,8 @@ class ToolCatalog
                 $irreversible,
                 $this->classifier->isPersonalData($toolName),
                 (string)($row['label'] ?? ''),
-                (bool)($row['output_public'] ?? false)
+                (bool)($row['output_public'] ?? false),
+                $definition?->fieldClassificationOverrides[$toolName] ?? null
             );
         }
 
@@ -277,7 +281,7 @@ class ToolCatalog
             }
         }
         try {
-            $server = ServerConfig::fromRow($row, $this->config->getProcessTimeout());
+            $server = ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitions->get($name));
             $result = $this->transports->for($server)->listTools($server);
         } catch (McpException $e) {
             $this->errorLogger->addLog('MCP tools/list', ['server' => $name, 'error' => $e->getMessage()]);

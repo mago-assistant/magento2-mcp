@@ -60,7 +60,7 @@ final class FakeServerRepository implements ServerRepositoryInterface
 
     public function merge(array $discovered): array
     {
-        return ['inserted' => 0, 'updated' => 0, 'missing' => 0];
+        return ['inserted' => 0, 'updated' => 0, 'missing' => 0, 'names' => []];
     }
 
     public function migrateLegacyNames(): array

@@ -9,6 +9,7 @@ namespace MagoAssistant\Mcp\Console\Command;
 use Magento\Framework\App\Area;
 use Magento\Framework\App\State;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
+use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Discovery\ServerScanner;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Formatter\OutputFormatter;
@@ -21,6 +22,7 @@ class DiscoverServers extends Command
         private readonly ServerScanner $scanner,
         private readonly ServerRepositoryInterface $servers,
         private readonly State $appState,
+        private readonly ToolCatalog $catalog,
         ?string $name = null
     ) {
         parent::__construct($name);
@@ -29,7 +31,7 @@ class DiscoverServers extends Command
     protected function configure(): void
     {
         $this->setName('mago:mcp:discover')
-            ->setDescription('Scan Composer packages and .mcp.json for MCP servers (new ones are added disabled).');
+            ->setDescription('Scan module definitions, Composer packages and .mcp.json for MCP servers (new ones are added disabled).');
         parent::configure();
     }
 
@@ -41,6 +43,9 @@ class DiscoverServers extends Command
             // area may already be set
         }
         $result = $this->servers->merge($this->scanner->scan());
+        foreach ($result['names'] as $name) {
+            $this->catalog->refresh($name);
+        }
         $output->writeln(sprintf(
             '<info>Inserted %d, updated %d, flagged %d missing.</info>',
             $result['inserted'],

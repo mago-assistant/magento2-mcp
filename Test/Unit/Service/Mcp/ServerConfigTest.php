@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 namespace MagoAssistant\Mcp\Test\Unit\Service\Mcp;
 
+use MagoAssistant\Mcp\Service\Discovery\ServerDefinition;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -46,6 +47,22 @@ final class ServerConfigTest extends TestCase
         self::assertTrue($config->outputPublic);
         self::assertSame('remote', $config->replacesSkill);
         self::assertSame('Remote', $config->label());
+    }
+
+    #[Test]
+    public function aDefinitionSuppliesTheNonStorableFields(): void
+    {
+        $definition = new ServerDefinition(
+            'remote',
+            fieldClassificationOverrides: ['who' => ['*' => ['public']]],
+            errorHints: ['x' => 'Try y.']
+        );
+
+        $config = ServerConfig::fromRow(['name' => 'remote', 'command' => [], 'transport' => 'http'], 10, $definition);
+
+        self::assertSame(['who' => ['*' => ['public']]], $config->fieldClassificationOverrides);
+        self::assertSame(['x' => 'Try y.'], $config->errorHints);
+        self::assertSame([], ServerConfig::fromRow(['name' => 'remote', 'command' => []], 10)->errorHints);
     }
 
     #[Test]

@@ -13,6 +13,7 @@ use Magento\Framework\Setup\ModuleDataSetupInterface;
 use MagoAssistant\Mago\Logger\ErrorLogger;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Model\Cache\Type\McpTools;
+use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Discovery\ServerScanner;
 
 /**
@@ -26,7 +27,8 @@ class RecurringData implements InstallDataInterface
         private readonly ServerScanner $scanner,
         private readonly ServerRepositoryInterface $servers,
         private readonly StateInterface $cacheState,
-        private readonly ErrorLogger $errorLogger
+        private readonly ErrorLogger $errorLogger,
+        private readonly ToolCatalog $catalog
     ) {
     }
 
@@ -46,7 +48,10 @@ class RecurringData implements InstallDataInterface
             $this->errorLogger->addLog('MCP server name migration during setup:upgrade', $e->getMessage());
         }
         try {
-            $this->servers->merge($this->scanner->scan());
+            $result = $this->servers->merge($this->scanner->scan());
+            foreach ($result['names'] as $name) {
+                $this->catalog->refresh($name);
+            }
         } catch (\Throwable $e) {
             $this->errorLogger->addLog('MCP discovery during setup:upgrade', $e->getMessage());
         }

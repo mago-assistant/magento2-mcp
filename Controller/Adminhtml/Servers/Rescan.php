@@ -20,7 +20,8 @@ class Rescan extends Action implements HttpPostActionInterface
     public function __construct(
         Context $context,
         private readonly ServerScanner $scanner,
-        private readonly ServerRepositoryInterface $servers
+        private readonly ServerRepositoryInterface $servers,
+        private readonly ToolCatalog $catalog
     ) {
         parent::__construct($context);
     }
@@ -28,6 +29,9 @@ class Rescan extends Action implements HttpPostActionInterface
     public function execute(): ResultInterface
     {
         $result = $this->servers->merge($this->scanner->scan());
+        foreach ($result['names'] as $name) {
+            $this->catalog->refresh($name);
+        }
         $this->messageManager->addSuccessMessage(
             __(
                 'Discovery inserted %1, updated %2 and flagged %3 missing.',

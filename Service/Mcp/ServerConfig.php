@@ -6,6 +6,8 @@ declare(strict_types=1);
 
 namespace MagoAssistant\Mcp\Service\Mcp;
 
+use MagoAssistant\Mcp\Service\Discovery\ServerDefinition;
+
 final class ServerConfig
 {
     public const TRANSPORT_STDIO = 'stdio';
@@ -57,8 +59,10 @@ final class ServerConfig
     /**
      * @param array<string,mixed> $row A decoded mago_mcp_server row
      * @param int $defaultTimeout Used when the row's timeout column is null
+     * @param ServerDefinition|null $definition The module definition for a "module" row: its per-tool field
+     *        classification and error hints are never stored, so they come from here
      */
-    public static function fromRow(array $row, int $defaultTimeout): self
+    public static function fromRow(array $row, int $defaultTimeout, ?ServerDefinition $definition = null): self
     {
         $env = [];
         foreach (is_array($row['env'] ?? null) ? $row['env'] : [] as $key => $value) {
@@ -81,7 +85,9 @@ final class ServerConfig
             self::stringList($row['allowed_tools'] ?? null),
             is_numeric($timeout) && (int)$timeout > 0 ? (int)$timeout : $defaultTimeout,
             (bool)($row['output_public'] ?? false),
-            (string)($row['replaces_skill'] ?? '')
+            (string)($row['replaces_skill'] ?? ''),
+            $definition?->fieldClassificationOverrides ?? [],
+            $definition?->errorHints ?? []
         );
     }
 

@@ -12,6 +12,8 @@ use MagoAssistant\Mcp\Model\Config;
 use MagoAssistant\Mcp\Service\Catalog\CatalogEntry;
 use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
+use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
+use MagoAssistant\Mcp\Service\Discovery\ServerDefinition;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
@@ -27,9 +29,11 @@ final class ToolCatalogTest extends TestCase
     private FakeTransport $transport;
     private FakeCache $cache;
     private FakeLogger $log;
+    private DefinitionRegistry $definitions;
 
     protected function setUp(): void
     {
+        $this->definitions = new DefinitionRegistry();
         $this->servers = new FakeServerRepository();
         $this->transport = new FakeTransport();
         $this->cache = new FakeCache();
@@ -46,7 +50,10 @@ final class ToolCatalogTest extends TestCase
         ];
     }
 
-    private function catalog(bool $enabled = true): ToolCatalog
+    /**
+     * @param array<string,mixed>|null $transports keyed by transport value; null means stdio only
+     */
+    private function catalog(bool $enabled = true, ?array $transports = null): ToolCatalog
     {
         $config = new Config(new FakeScopeConfig([
             'mago/mcp/enabled' => $enabled ? '1' : '0',
@@ -56,11 +63,12 @@ final class ToolCatalogTest extends TestCase
 
         return new ToolCatalog(
             $this->servers,
-            new TransportResolver(['stdio' => $this->transport]),
+            new TransportResolver($transports ?? ['stdio' => $this->transport]),
             $this->cache,
             $config,
             new ModeClassifier(),
-            new ErrorLogger($this->log, new Json())
+            new ErrorLogger($this->log, new Json()),
+            $this->definitions
         );
     }
 
@@ -255,6 +263,23 @@ final class ToolCatalogTest extends TestCase
         );
         self::assertArrayHasKey('mago_mcp_tools_remote', $this->cache->store, 'the failure is cached like any other');
         self::assertSame(1, $this->transport->listCalls, 'the stdio transport was asked once, for demo');
+    }
+
+    #[Test]
+    public function aDefinitionsPerToolOverrideReachesTheEntry(): void
+    {
+        $this->servers->add('demo', true, 'module', ['output_public' => true]);
+        $this->definitions = new DefinitionRegistry([new ServerDefinition('demo', fieldClassificationOverrides: [
+            'customer-get' => ['*' => ['public'], 'email' => ['strip']],
+        ])]);
+
+        $entries = [];
+        foreach ($this->catalog()->entries() as $entry) {
+            $entries[$entry->tool] = $entry;
+        }
+
+        self::assertSame(['*' => ['public'], 'email' => ['strip']], $entries['customer-get']->fieldClassification);
+        self::assertNull($entries['product-list']->fieldClassification, 'no override: the server-wide rule applies');
     }
 
     #[Test]

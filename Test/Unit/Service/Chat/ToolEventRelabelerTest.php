@@ -13,6 +13,7 @@ use MagoAssistant\Mago\Logger\ErrorLogger;
 use MagoAssistant\Mcp\Model\Config;
 use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
+use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
 use MagoAssistant\Mcp\Service\Chat\ToolEventRelabeler;
 use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry;
@@ -62,7 +63,8 @@ final class ToolEventRelabelerTest extends TestCase
             new FakeCache(),
             $config,
             new ModeClassifier(),
-            $errorLogger
+            $errorLogger,
+            new DefinitionRegistry()
         );
         $executor = new Executor(
             $catalog,

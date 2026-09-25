@@ -16,6 +16,7 @@ use MagoAssistant\Mcp\Model\Config;
 use MagoAssistant\Mcp\Service\Catalog\CatalogEntry;
 use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
+use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
 use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Service\Tool\Mcp\McpSkill;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
@@ -68,7 +69,8 @@ final class McpSkillTest extends TestCase
             new FakeCache(),
             $config,
             new ModeClassifier(),
-            new ErrorLogger($this->log, $json)
+            new ErrorLogger($this->log, $json),
+            new DefinitionRegistry()
         );
         $executor = new Executor(
             $catalog,

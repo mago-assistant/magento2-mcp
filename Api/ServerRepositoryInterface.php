@@ -40,7 +40,7 @@ interface ServerRepositoryInterface
      * non-manual ones are flagged missing. Manual rows are untouched.
      *
      * @param DiscoveredServer[] $discovered
-     * @return array{inserted:int, updated:int, missing:int}
+     * @return array{inserted:int, updated:int, missing:int, names:string[]} names inserted or updated
      */
     public function merge(array $discovered): array;
 
