@@ -20,7 +20,8 @@ final class FakeMcpServer implements ServerInterface
         private readonly string $code = 'test',
         private readonly ?AuthenticatorInterface $authenticator = null,
         private readonly array $allowedTools = [],
-        private readonly array $classification = []
+        private readonly array $classification = [],
+        private readonly string $replacesSkill = ''
     ) {
     }
 
@@ -62,6 +63,11 @@ final class FakeMcpServer implements ServerInterface
     public function getFieldClassification(string $toolName): array
     {
         return $this->classification;
+    }
+
+    public function getReplacesSkill(): string
+    {
+        return $this->replacesSkill;
     }
 
     public function getErrorHint(string $toolName, string $error): string

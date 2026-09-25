@@ -4,9 +4,23 @@
         <mago_mcp>
             <custom>
                 <enabled>0</enabled>
+                <auth_type>bearer</auth_type>
                 <timeout>20</timeout>
                 <output_public>0</output_public>
             </custom>
         </mago_mcp>
+        <mago>
+            <mcp_rumvision>
+                <enabled>0</enabled>
+                <label>RUMvision</label>
+                <url>https://insights.rumvision.com/mcp</url>
+                <auth_type>oauth</auth_type>
+                <!-- Leaves out who-am-i, the help-center tools and share-conversation-summary, which sends the conversation to RUMvision -->
+                <allowed_tools>list-domains-tool,describe-catalog-tool,get-diagnosis-guide-tool,list-template-rules-tool,query-metrics-tool,query-metric-crosstab-tool,query-timeline-tool,get-top-issues-tool,get-health-checks-tool,get-issues-tool,get-ai-analyses-tool,mark-issue-fixed-tool,get-dashboard-link-tool</allowed_tools>
+                <replaces_skill>rumvision</replaces_skill>
+                <output_public>1</output_public>
+                <timeout>30</timeout>
+            </mcp_rumvision>
+        </mago>
     </default>
 </config>

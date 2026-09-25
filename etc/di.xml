@@ -9,7 +9,44 @@
         <arguments>
             <argument name="servers" xsi:type="array">
                 <item name="custom" xsi:type="object">MagoAssistant\Mcp\Service\ConfiguredServer</item>
+                <item name="rumvision" xsi:type="object">MagoAssistant\Mcp\Service\Server\Rumvision</item>
             </argument>
+        </arguments>
+    </type>
+
+    <virtualType name="MagoAssistant\Mcp\Service\Server\Rumvision" type="MagoAssistant\Mcp\Service\ConfiguredServer">
+        <arguments>
+            <argument name="code" xsi:type="string">rumvision</argument>
+            <argument name="configPath" xsi:type="string">mago/mcp_rumvision</argument>
+            <argument name="classificationOverrides" xsi:type="array">
+                <!-- Everything else is performance data; this one returns the connected user's identity -->
+                <item name="who-am-i-tool" xsi:type="array">
+                    <item name="*" xsi:type="array">
+                        <item name="0" xsi:type="string">public</item>
+                    </item>
+                    <item name="name" xsi:type="array">
+                        <item name="0" xsi:type="string">strip</item>
+                    </item>
+                    <item name="email" xsi:type="array">
+                        <item name="0" xsi:type="string">strip</item>
+                    </item>
+                </item>
+            </argument>
+            <argument name="errorHints" xsi:type="array">
+                <item name="This domain does not exist" xsi:type="string">Call mcp_rumvision__list_domains_tool for the exact domain names (e.g. "shop.nl", not "shop.com") and retry with one of them.</item>
+            </argument>
+        </arguments>
+    </virtualType>
+
+    <!-- Proxies: the session is only touched when an OAuth request needs the logged-in admin user -->
+    <type name="MagoAssistant\Mcp\Service\OAuth\CurrentAdminUser">
+        <arguments>
+            <argument name="authSession" xsi:type="object">Magento\Backend\Model\Auth\Session\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="MagoAssistant\Mcp\Service\OAuth\PendingAuthorizationStore">
+        <arguments>
+            <argument name="session" xsi:type="object">Magento\Backend\Model\Session\Proxy</argument>
         </arguments>
     </type>
 
