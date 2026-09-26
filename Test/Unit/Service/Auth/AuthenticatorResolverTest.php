@@ -12,6 +12,11 @@ use MagoAssistant\Mcp\Service\Auth\NoneAuthenticator;
 use MagoAssistant\Mcp\Service\Mcp\McpAuthenticationException;
 use MagoAssistant\Mcp\Service\Mcp\McpException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
+use MagoAssistant\Mcp\Service\OAuth\OAuthAuthenticator;
+use MagoAssistant\Mcp\Service\OAuth\OAuthAuthenticatorFactory;
+use MagoAssistant\Mcp\Service\OAuth\OAuthClient;
+use MagoAssistant\Mcp\Test\Unit\Fakes\InMemoryClientRepository;
+use MagoAssistant\Mcp\Test\Unit\Fakes\InMemoryTokenRepository;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -48,10 +53,19 @@ final class AuthenticatorResolverTest extends TestCase
     }
 
     #[Test]
-    public function oauthIsAnAuthenticationFailureUntilItExists(): void
+    public function oauthResolvesThroughTheFactoryAndFailsWithoutOne(): void
     {
+        $factory = new OAuthAuthenticatorFactory(
+            new InMemoryTokenRepository(),
+            new InMemoryClientRepository(),
+            $this->createStub(OAuthClient::class)
+        );
+        $server = new ServerConfig('a', [], transport: 'http', authType: 'oauth');
+
+        self::assertInstanceOf(OAuthAuthenticator::class, (new AuthenticatorResolver($factory))->for($server));
+
         $this->expectException(McpAuthenticationException::class);
-        (new AuthenticatorResolver())->for(new ServerConfig('a', [], transport: 'http', authType: 'oauth'));
+        (new AuthenticatorResolver())->for($server);
     }
 
     #[Test]
