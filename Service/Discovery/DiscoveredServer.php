@@ -32,7 +32,8 @@ final class DiscoveredServer
         public readonly array $allowedTools = [],
         public readonly ?int $timeout = null,
         public readonly bool $outputPublic = false,
-        public readonly string $replacesSkill = ''
+        public readonly string $replacesSkill = '',
+        public readonly bool $readOnly = false
     ) {
     }
 
@@ -59,6 +60,7 @@ final class DiscoveredServer
             'timeout' => $this->timeout,
             'output_public' => $this->outputPublic,
             'replaces_skill' => $this->replacesSkill,
+            'read_only' => $this->readOnly,
         ];
         if ($this->bearerToken !== '') {
             $row['bearer_token'] = $this->bearerToken;

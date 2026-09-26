@@ -365,6 +365,39 @@ final class ToolCatalogTest extends TestCase
     }
 
     #[Test]
+    public function aReadOnlyServerMakesEveryToolARead(): void
+    {
+        $this->servers->add('demo', true, 'composer', ['read_only' => true]);
+
+        $entries = $this->catalog()->entries();
+
+        self::assertNotEmpty($entries);
+        foreach ($entries as $entry) {
+            self::assertSame(ModeClassifier::READ, $entry->mode, $entry->tool . ' is a read on a read-only server');
+            self::assertSame(CatalogEntry::ORIGIN_SERVER, $entry->modeOrigin);
+            self::assertFalse($entry->irreversible, $entry->tool . ' is never irreversible as a read');
+        }
+        self::assertContains('product-delete', array_map(static fn ($e) => $e->tool, $entries));
+    }
+
+    #[Test]
+    public function aDefinitionAppliesToModuleRowsOnly(): void
+    {
+        $this->servers->add('demo', true, 'manual', ['output_public' => true]);
+        $this->definitions = new DefinitionRegistry([new ServerDefinition('demo', fieldClassificationOverrides: [
+            'customer-get' => ['*' => ['public'], 'email' => ['strip']],
+        ], errorHints: ['x' => 'y'])]);
+
+        $entries = [];
+        foreach ($this->catalog()->entries() as $entry) {
+            $entries[$entry->tool] = $entry;
+        }
+
+        self::assertNull($entries['customer-get']->fieldClassification, 'a manual row of the same name is not the module\'s server');
+        self::assertSame([], $this->catalog()->serverConfig('demo')?->errorHints);
+    }
+
+    #[Test]
     public function serverConfigResolvesEnabledServersOnly(): void
     {
         $this->servers->add('demo', true);

@@ -31,6 +31,7 @@ final class ServerConfig
      * @param string $replacesSkill Mago skill hidden for admins offered this server, or ''
      * @param array<string,array<string,array{0:string,1?:string}>> $fieldClassificationOverrides per tool
      * @param array<string,string> $errorHints error fragment => hint appended to that error
+     * @param bool $readOnly The administrator declares every tool a read: no confirmation card
      */
     public function __construct(
         public readonly string $name,
@@ -47,7 +48,8 @@ final class ServerConfig
         public readonly bool $outputPublic = false,
         public readonly string $replacesSkill = '',
         public readonly array $fieldClassificationOverrides = [],
-        public readonly array $errorHints = []
+        public readonly array $errorHints = [],
+        public readonly bool $readOnly = false
     ) {
     }
 
@@ -87,7 +89,8 @@ final class ServerConfig
             (bool)($row['output_public'] ?? false),
             (string)($row['replaces_skill'] ?? ''),
             $definition?->fieldClassificationOverrides ?? [],
-            $definition?->errorHints ?? []
+            $definition?->errorHints ?? [],
+            (bool)($row['read_only'] ?? false)
         );
     }
 

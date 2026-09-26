@@ -35,6 +35,7 @@ final class ServerMergerTest extends TestCase
         self::assertSame([$fresh], $plan['insert']);
         self::assertSame([$widget], $plan['update'], 'manual rows are never updated by a scan');
         self::assertSame(['gone'], $plan['missing']);
+        self::assertSame(['mine'], $plan['skipped'], 'a discovered server that met a manual row is reported, not silently dropped');
     }
 
     #[Test]

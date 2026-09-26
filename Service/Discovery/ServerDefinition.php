@@ -36,7 +36,8 @@ final class ServerDefinition
         public readonly bool $outputPublic = false,
         public readonly string $replacesSkill = '',
         public readonly array $fieldClassificationOverrides = [],
-        public readonly array $errorHints = []
+        public readonly array $errorHints = [],
+        public readonly bool $readOnly = false
     ) {
         $this->name = DiscoveredServer::normaliseName($name);
     }
@@ -57,7 +58,8 @@ final class ServerDefinition
             array_values(array_map('strval', $this->allowedTools)),
             $this->timeout !== null && $this->timeout > 0 ? (int)$this->timeout : null,
             $this->outputPublic,
-            $this->replacesSkill
+            $this->replacesSkill,
+            $this->readOnly
         );
     }
 }

@@ -23,7 +23,7 @@ final class FakeServerRepository implements ServerRepositoryInterface
         $name = DiscoveredServer::normaliseName($name);
         $this->rows[$name] = $extra + ['server_id' => count($this->rows) + 1, 'name' => $name, 'command' => ['php', $name],
             'env' => [], 'cwd' => null, 'label' => '', 'transport' => 'stdio', 'url' => '', 'auth_type' => 'none',
-            'allowed_tools' => [], 'timeout' => null, 'output_public' => false, 'replaces_skill' => '',
+            'allowed_tools' => [], 'timeout' => null, 'output_public' => false, 'replaces_skill' => '', 'read_only' => false,
             'source' => $source, 'enabled' => $enabled, 'missing' => false, 'last_error' => null];
     }
 

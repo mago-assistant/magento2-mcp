@@ -8,12 +8,15 @@ namespace MagoAssistant\Mcp\Service\Catalog;
 
 /**
  * One MCP tool as the catalog sees it. Its mode is read or write, from the name classifier
- * ("classifier") or from the server's annotations tightening a read name to a write ("annotation").
+ * ("classifier"), from the server's annotations tightening a read name to a write ("annotation"), or
+ * read because the administrator declared the whole server read-only ("server").
  */
 final class CatalogEntry
 {
     public const ORIGIN_CLASSIFIER = 'classifier';
     public const ORIGIN_ANNOTATION = 'annotation';
+    /** The administrator declared the whole server read-only. */
+    public const ORIGIN_SERVER = 'server';
 
     /**
      * @param array<string,mixed> $inputSchema

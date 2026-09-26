@@ -9,6 +9,7 @@ namespace MagoAssistant\Mcp\Model\Server;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Framework\Serialize\Serializer\Json;
+use MagoAssistant\Mago\Logger\ErrorLogger;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
 use MagoAssistant\Mcp\Service\Discovery\NameMigration;
@@ -23,7 +24,8 @@ class Repository implements ServerRepositoryInterface
         private readonly ResourceConnection $resourceConnection,
         private readonly Json $json,
         private readonly ServerMerger $merger,
-        private readonly EncryptorInterface $encryptor
+        private readonly EncryptorInterface $encryptor,
+        private readonly ErrorLogger $errorLogger
     ) {
     }
 
@@ -66,6 +68,7 @@ class Repository implements ServerRepositoryInterface
             'replaces_skill' => isset($row['replaces_skill']) && $row['replaces_skill'] !== ''
                 ? (string)$row['replaces_skill']
                 : null,
+            'read_only' => (int)(bool)($row['read_only'] ?? false),
             'source' => $row['source'] ?? DiscoveredServer::SOURCE_MANUAL,
             'enabled' => (int)(bool)($row['enabled'] ?? false),
             'missing' => (int)(bool)($row['missing'] ?? false),
@@ -77,7 +80,7 @@ class Repository implements ServerRepositoryInterface
                 : null;
         }
         $update = ['command', 'env', 'cwd', 'label', 'transport', 'url', 'auth_type', 'allowed_tools', 'timeout',
-            'output_public', 'replaces_skill', 'source', 'enabled', 'missing', 'last_error'];
+            'output_public', 'replaces_skill', 'read_only', 'source', 'enabled', 'missing', 'last_error'];
         if (array_key_exists('bearer_token', $data)) {
             $update[] = 'bearer_token';
         }
@@ -117,6 +120,9 @@ class Repository implements ServerRepositoryInterface
         }
         foreach ($plan['missing'] as $name) {
             $this->update($name, ['missing' => 1]);
+        }
+        foreach ($plan['skipped'] as $name) {
+            $this->errorLogger->addLog('MCP discovery skipped a manual row', ['name' => $name]);
         }
 
         return [
@@ -173,6 +179,7 @@ class Repository implements ServerRepositoryInterface
         $row['timeout'] = isset($row['timeout']) && (int)$row['timeout'] > 0 ? (int)$row['timeout'] : null;
         $row['output_public'] = (bool)($row['output_public'] ?? false);
         $row['replaces_skill'] = (string)($row['replaces_skill'] ?? '');
+        $row['read_only'] = (bool)($row['read_only'] ?? false);
         $row['enabled'] = (bool)$row['enabled'];
         $row['missing'] = (bool)$row['missing'];
         $row['bearer_token'] = isset($row['bearer_token']) && $row['bearer_token'] !== ''

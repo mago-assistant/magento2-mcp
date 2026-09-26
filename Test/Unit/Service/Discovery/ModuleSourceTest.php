@@ -62,4 +62,12 @@ final class ModuleSourceTest extends TestCase
         self::assertSame(['A' => '1'], $servers[0]->env);
         self::assertSame('/app', $servers[0]->cwd);
     }
+
+    #[Test]
+    public function aDefinitionMayDeclareTheServerReadOnly(): void
+    {
+        $servers = (new ModuleSource(new DefinitionRegistry([new ServerDefinition('safe', readOnly: true)])))->discover();
+
+        self::assertTrue($servers[0]->readOnly);
+    }
 }

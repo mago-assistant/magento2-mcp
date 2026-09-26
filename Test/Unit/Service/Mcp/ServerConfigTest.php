@@ -47,6 +47,13 @@ final class ServerConfigTest extends TestCase
         self::assertTrue($config->outputPublic);
         self::assertSame('remote', $config->replacesSkill);
         self::assertSame('Remote', $config->label());
+        self::assertFalse($config->readOnly, 'absent means not read-only');
+    }
+
+    #[Test]
+    public function aReadOnlyRowIsFlagged(): void
+    {
+        self::assertTrue(ServerConfig::fromRow(['name' => 'x', 'command' => [], 'read_only' => 1], 1)->readOnly);
     }
 
     #[Test]

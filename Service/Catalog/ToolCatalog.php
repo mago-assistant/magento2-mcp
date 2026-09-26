@@ -13,6 +13,8 @@ use MagoAssistant\Mcp\Model\Cache\Type\McpTools;
 use MagoAssistant\Mcp\Model\Config;
 use MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver;
 use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
+use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
+use MagoAssistant\Mcp\Service\Discovery\ServerDefinition;
 use MagoAssistant\Mcp\Service\Mcp\McpAuthenticationException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
@@ -91,7 +93,7 @@ class ToolCatalog
         $row = $this->servers->getByName($name);
 
         return $row !== null && $row['enabled']
-            ? ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitions->get($name))
+            ? ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitionFor($row))
             : null;
     }
 
@@ -148,16 +150,20 @@ class ToolCatalog
             return $this->entriesMemo[$key];
         }
         $entries = [];
-        $definition = $this->definitions->get($name);
+        $definition = $this->definitionFor($row);
         // A token-cost filter, not a permission: a name not on the list is not a skill at all.
         $allowed = array_map('strval', is_array($row['allowed_tools'] ?? null) ? $row['allowed_tools'] : []);
+        // The administrator's declaration: every tool of this server is a read, whatever its name says.
+        $readOnly = (bool)($row['read_only'] ?? false);
         foreach ($this->fetched($row, $adminUserId)['tools'] as $tool) {
             $toolName = (string)$tool['name'];
             if ($allowed !== [] && !in_array($toolName, $allowed, true)) {
                 continue;
             }
             $annotations = is_array($tool['annotations'] ?? null) ? $tool['annotations'] : [];
-            [$mode, $origin] = $this->modeOf($toolName, $annotations);
+            [$mode, $origin] = $readOnly
+                ? [ModeClassifier::READ, CatalogEntry::ORIGIN_SERVER]
+                : $this->modeOf($toolName, $annotations);
             // A read tool is never irreversible, whatever IRREVERSIBLE_WORDS or destructiveHint says.
             $irreversible = $mode === ModeClassifier::WRITE
                 && ($this->classifier->isIrreversible($toolName) || ($annotations['destructiveHint'] ?? false) === true);
@@ -298,7 +304,7 @@ class ToolCatalog
                 ];
             }
         }
-        $server = ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitions->get($name));
+        $server = ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitionFor($row));
         if ($server->authType === ServerConfig::AUTH_OAUTH && !$this->connected($server, $adminUserId)) {
             // Per-admin credentials: only a connected admin may trigger the fetch; the list then serves
             // everyone from the cache. No request, no cache entry, no last_error.
@@ -354,6 +360,19 @@ class ToolCatalog
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * A module definition belongs to the row the module created; a manual row that happens to share the
+     * name gets neither its privacy map nor its hints.
+     *
+     * @param array<string,mixed> $row
+     */
+    private function definitionFor(array $row): ?ServerDefinition
+    {
+        return ($row['source'] ?? '') === DiscoveredServer::SOURCE_MODULE
+            ? $this->definitions->get((string)$row['name'])
+            : null;
     }
 
     private function memoKey(string $name, ?int $adminUserId): string

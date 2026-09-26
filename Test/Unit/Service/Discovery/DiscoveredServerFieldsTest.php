@@ -21,6 +21,7 @@ final class DiscoveredServerFieldsTest extends TestCase
             'name' => 'demo', 'command' => ['php', 'x'], 'env' => ['A' => '1'], 'cwd' => '/app', 'source' => 'composer',
             'label' => '', 'transport' => 'stdio', 'url' => '', 'auth_type' => 'none',
             'allowed_tools' => [], 'timeout' => null, 'output_public' => false, 'replaces_skill' => '',
+            'read_only' => false,
         ], $row);
         self::assertArrayNotHasKey('bearer_token', $row, 'no token from the source leaves a stored token alone on rescan');
     }
@@ -56,5 +57,6 @@ final class DiscoveredServerFieldsTest extends TestCase
         self::assertTrue($row['output_public']);
         self::assertSame('remote', $row['replaces_skill']);
         self::assertSame('Remote', $row['label']);
+        self::assertTrue((new DiscoveredServer('r', [], [], null, 'module', readOnly: true))->toRow()['read_only']);
     }
 }

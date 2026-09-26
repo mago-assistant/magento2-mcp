@@ -14,12 +14,14 @@ class ServerMerger
     /**
      * @param array<string,array<string,mixed>> $existingByName
      * @param DiscoveredServer[] $discovered
-     * @return array{insert: DiscoveredServer[], update: DiscoveredServer[], missing: string[]}
+     * @return array{insert: DiscoveredServer[], update: DiscoveredServer[], missing: string[], skipped: string[]}
+     *         skipped: discovered names that met an administrator's manual row and were left alone
      */
     public function plan(array $existingByName, array $discovered): array
     {
         $insert = [];
         $update = [];
+        $skipped = [];
         $seen = [];
         foreach ($discovered as $server) {
             $seen[$server->name] = true;
@@ -29,6 +31,7 @@ class ServerMerger
                 continue;
             }
             if (($row['source'] ?? '') === DiscoveredServer::SOURCE_MANUAL) {
+                $skipped[] = $server->name;
                 continue;
             }
             $update[] = $server;
@@ -40,6 +43,6 @@ class ServerMerger
             }
         }
 
-        return ['insert' => $insert, 'update' => $update, 'missing' => $missing];
+        return ['insert' => $insert, 'update' => $update, 'missing' => $missing, 'skipped' => $skipped];
     }
 }

@@ -67,11 +67,18 @@ class ListServers extends Command
 
             return Command::SUCCESS;
         }
-        if ($this->servers->getByName((string)$name) === null) {
+        $row = $this->servers->getByName((string)$name);
+        if ($row === null) {
             $output->writeln('<error>No such server: ' . OutputFormatter::escape((string)$name) . '</error>');
 
             return Command::FAILURE;
         }
+        $output->writeln(sprintf(
+            '<info>%s</info> — %s%s',
+            OutputFormatter::escape($row['label'] !== '' ? (string)$row['label'] : (string)$row['name']),
+            OutputFormatter::escape($row['transport'] === 'http' ? (string)$row['url'] : implode(' ', $row['command'])),
+            $row['read_only'] ? ' (read-only server)' : ''
+        ));
         foreach ($this->catalog->entriesForServer((string)$name) as $entry) {
             $output->writeln(sprintf(
                 '%-36s %-6s (%s)%s%s%s',
