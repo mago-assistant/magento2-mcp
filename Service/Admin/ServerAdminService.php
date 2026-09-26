@@ -40,7 +40,9 @@ class ServerAdminService
             throw new \InvalidArgumentException(sprintf('No MCP server named "%s".', $existingName));
         }
         if ($existing !== null && $existing['source'] !== DiscoveredServer::SOURCE_MANUAL) {
-            $this->servers->save(ServerInput::validateTrust($post, $existing) + $existing);
+            // Without the token key the repository leaves the token column untouched.
+            unset($existing['bearer_token']);
+            $this->servers->save(ServerInput::validateTrust($post) + $existing);
             $this->catalog->refresh((string)$existing['name']);
 
             return (string)$existing['name'];

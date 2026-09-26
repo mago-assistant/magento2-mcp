@@ -51,9 +51,9 @@ what an administrator may change:
 
 | source | transport | created by | editable |
 |---|---|---|---|
-| `composer` | stdio | a Composer package with an `extra.mago-mcp` block or an `*mcp*` binary | enable, disable |
-| `mcp_json` | stdio or http | the Magento root's `.mcp.json` (when enabled in config) | enable, disable |
-| `module` | stdio or http | a `ServerDefinition` any module registers in `di.xml` | enable, disable |
+| `composer` | stdio | a Composer package with an `extra.mago-mcp` block or an `*mcp*` binary | enable, disable, trust settings |
+| `mcp_json` | stdio or http | the Magento root's `.mcp.json` (when enabled in config) | enable, disable, trust settings |
+| `module` | stdio or http | a `ServerDefinition` any module registers in `di.xml` | enable, disable, trust settings |
 | `manual` | http | an administrator, with Add server on the grid | everything |
 
 Sources run in the order module, Composer, `.mcp.json`. The first source to yield a name wins; a later
@@ -81,10 +81,11 @@ Disable per row and Rescan and Refresh tool lists as toolbar buttons.
 **Add server** opens a form for a remote server: label, URL, authentication, bearer token, allowed tools,
 timeout, the skill it replaces, and the trust settings. The name is derived from the label once and never
 changes, because it keys OAuth tokens, the cache and the per-user permission rows. A blank token field on
-edit keeps the stored token, which is never shown again. **Edit** on a discovered row shows its
+edit keeps the stored token, which is never shown again, but only while the URL stays on the same host:
+pointing the row at another host requires typing the token again. **Edit** on a discovered row shows its
 connection details as text and changes only its trust settings. **Delete** is offered on rows added here;
 it removes every admin's OAuth tokens and the client registration with the row, and so does changing an
-OAuth server's URL.
+OAuth server's URL, whether on the form or through a rescan of its source.
 
 Once a server is enabled, each of its tools appears as its own row, `mcp_<server>__<tool>`, in
 **Stores > Admin Assistant > Skills & Permissions** beside Mago's own skills, with Mago's own per-user

@@ -143,7 +143,8 @@ $authType = (string)$block->getValue('auth_type', 'none');
     </div>
 </form>
 <?php if ($row !== null && $manual): ?>
-    <form method="post" action="<?= $escaper->escapeUrl($block->getDeleteUrl()) ?>" class="mago-mcp-delete">
+    <form method="post" action="<?= $escaper->escapeUrl($block->getDeleteUrl()) ?>"
+          onsubmit="return confirm('<?= $escaper->escapeJs(__('Delete this server, and every admin\'s connection to it?')) ?>');" class="mago-mcp-delete">
         <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
         <input type="hidden" name="name" value="<?= $escaper->escapeHtmlAttr((string)$row['name']) ?>"/>
         <button type="submit" class="action-tertiary"><?= $escaper->escapeHtml(__('Delete this server')) ?></button>

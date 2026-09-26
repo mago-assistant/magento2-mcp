@@ -47,8 +47,10 @@ final class ServerInput
             $errors[] = 'Authentication must be none, bearer or oauth.';
         }
         $token = trim((string)($post['bearer_token'] ?? ''));
-        if ($authType === ServerConfig::AUTH_BEARER && $token === '' && $existing === null) {
-            $errors[] = 'A bearer token is required for bearer authentication.';
+        if ($authType === ServerConfig::AUTH_BEARER && $token === '' && !self::keepsStoredToken($existing, $url)) {
+            // A stored token is kept only for the host it was entered for: pointing the row elsewhere must
+            // not hand a write-only secret to that host.
+            $errors[] = 'Enter the bearer token: it is required for a new server, a new host, or a switch to bearer.';
         }
         $timeout = trim((string)($post['timeout'] ?? ''));
         if ($timeout !== '' && (!ctype_digit($timeout) || (int)$timeout < 1 || (int)$timeout > 3600)) {
@@ -74,7 +76,7 @@ final class ServerInput
             'replaces_skill' => $replaces,
             'enabled' => self::checked($post, 'enabled'),
             'missing' => false,
-        ] + self::validateTrust($post, $existing);
+        ] + self::validateTrust($post);
         // Blank keeps the stored token: the key is left out, so the repository does not touch the column.
         if ($token !== '') {
             $row['bearer_token'] = $token;
@@ -87,12 +89,33 @@ final class ServerInput
      * The settings an administrator owns on any row, whatever its source.
      *
      * @param array<string,mixed> $post
-     * @param array<string,mixed>|null $existing
      * @return array{read_only: bool, output_public: bool}
      */
-    public static function validateTrust(array $post, ?array $existing): array
+    public static function validateTrust(array $post): array
     {
         return ['read_only' => self::checked($post, 'read_only'), 'output_public' => self::checked($post, 'output_public')];
+    }
+
+    /**
+     * @param array<string,mixed>|null $existing
+     */
+    private static function keepsStoredToken(?array $existing, string $url): bool
+    {
+        if ($existing === null || (string)($existing['bearer_token'] ?? '') === '') {
+            return false;
+        }
+
+        return self::origin((string)($existing['url'] ?? '')) === self::origin($url);
+    }
+
+    private static function origin(string $url): string
+    {
+        $parts = parse_url($url);
+
+        return is_array($parts)
+            ? strtolower((string)($parts['scheme'] ?? '')) . '://' . strtolower((string)($parts['host'] ?? ''))
+                . (isset($parts['port']) ? ':' . $parts['port'] : '')
+            : '';
     }
 
     private static function urlError(string $url): ?string

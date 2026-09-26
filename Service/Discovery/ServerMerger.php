@@ -19,6 +19,20 @@ class ServerMerger
      * @param array<string,mixed> $existing
      * @return array<string,mixed>
      */
+    /**
+     * Whether a rescan moved an OAuth server to another URL: its tokens were issued for the old one.
+     *
+     * @param array<string,mixed> $existing
+     */
+    public static function credentialsStale(DiscoveredServer $server, array $existing): bool
+    {
+        return ($existing['auth_type'] ?? '') === 'oauth' && (string)($existing['url'] ?? '') !== $server->url;
+    }
+
+    /**
+     * @param array<string,mixed> $existing
+     * @return array<string,mixed>
+     */
     public static function updatedRow(DiscoveredServer $server, array $existing): array
     {
         return [

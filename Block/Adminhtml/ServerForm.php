@@ -89,6 +89,14 @@ class ServerForm extends Template
 
     public function isChecked(string $key): bool
     {
+        $this->getValue($key);
+        if ($this->formData !== []) {
+            // A failed save sent the form back: an unticked box is simply absent from it, and must stay
+            // unticked rather than fall back to the stored value.
+            $value = $this->formData[$key] ?? false;
+
+            return in_array((string)$value, ['1', 'on', 'true'], true);
+        }
         $value = $this->getValue($key, false);
 
         return in_array(is_bool($value) ? ($value ? '1' : '0') : (string)$value, ['1', 'on', 'true'], true);

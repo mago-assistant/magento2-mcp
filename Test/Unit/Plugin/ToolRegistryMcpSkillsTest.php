@@ -355,4 +355,17 @@ final class ToolRegistryMcpSkillsTest extends TestCase
         self::assertSame(0, $this->servers->byNameCalls, 'server rows come from the per-request list, not a query per skill');
         self::assertSame(0, $this->authenticators->checks, 'one credential check per server per admin per request, already made');
     }
+
+    #[Test]
+    public function anUnknownNonMcpNameNeverListsServers(): void
+    {
+        $this->addOauthServer();
+        $this->authenticators->credentials['remote:7'] = true;
+        $plugin = $this->plugin();
+        $registry = new PluggedToolRegistry(null, [$this->magoTool], $plugin);
+        $this->transport->listCalls = 0;
+
+        self::assertNull($registry->getTool('made_up_by_the_model', 7));
+        self::assertSame(0, $this->transport->listCalls, 'a name that is not an MCP skill costs no server call');
+    }
 }

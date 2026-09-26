@@ -60,7 +60,8 @@ class ToolRegistryMcpSkills
      */
     public function afterGetToolByName(ToolRegistry $subject, ?ToolInterface $result, string $name): ?ToolInterface
     {
-        if ($result !== null) {
+        // Only a name shaped like an MCP skill may cost a look at the servers' tool lists.
+        if ($result !== null || !str_starts_with($name, McpSkill::PREFIX)) {
             return $result;
         }
         try {
@@ -128,7 +129,7 @@ class ToolRegistryMcpSkills
     ): ?ToolInterface {
         try {
             if ($result === null) {
-                if ($adminUserId === null) {
+                if ($adminUserId === null || !str_starts_with($name, McpSkill::PREFIX)) {
                     return null;
                 }
                 $skill = $this->skills->byName($name, $adminUserId);

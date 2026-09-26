@@ -84,4 +84,16 @@ final class ServerMergerTest extends TestCase
         self::assertFalse($row['missing']);
         self::assertSame('x', $row['last_error']);
     }
+
+    #[Test]
+    public function anOauthRowWhoseUrlChangedHasStaleCredentials(): void
+    {
+        $existing = ['name' => 'docs', 'auth_type' => 'oauth', 'url' => 'https://a.test/mcp'];
+        $moved = new DiscoveredServer('docs', [], [], null, DiscoveredServer::SOURCE_MCP_JSON, url: 'https://b.test/mcp', authType: 'oauth');
+        $same = new DiscoveredServer('docs', [], [], null, DiscoveredServer::SOURCE_MCP_JSON, url: 'https://a.test/mcp', authType: 'oauth');
+
+        self::assertTrue(ServerMerger::credentialsStale($moved, $existing));
+        self::assertFalse(ServerMerger::credentialsStale($same, $existing));
+        self::assertFalse(ServerMerger::credentialsStale($moved, ['auth_type' => 'bearer', 'url' => 'https://a.test/mcp']));
+    }
 }

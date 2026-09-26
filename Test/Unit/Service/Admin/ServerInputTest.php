@@ -81,7 +81,7 @@ final class ServerInputTest extends TestCase
             'http loopback' => ['http://127.0.0.1/mcp', true],
             'http ipv6 loopback' => ['http://[::1]/mcp', true],
             'http .internal' => ['http://mcp.internal/mcp', true],
-            'http .docker' => ['http://context.docker/mcp', true],
+            'http .docker' => ['http://mcp.docker/mcp', true],
             'http .local' => ['http://box.local/mcp', true],
             'http .test' => ['http://mcp.test/mcp', true],
             'http public host' => ['http://mcp.example.com/mcp', false],
@@ -119,7 +119,8 @@ final class ServerInputTest extends TestCase
         self::assertSame([], $created['errors']);
         self::assertSame('s3cret', $created['row']['bearer_token']);
 
-        $existing = ['name' => 'docs_server', 'label' => 'Docs Server', 'source' => 'manual', 'auth_type' => 'bearer'];
+        $existing = ['name' => 'docs_server', 'label' => 'Docs Server', 'source' => 'manual', 'auth_type' => 'bearer',
+            'url' => 'https://mcp.example.com/mcp', 'bearer_token' => 's3cret'];
         $edited = ServerInput::validate(self::post(['auth_type' => 'bearer', 'label' => 'Renamed']), $existing);
         self::assertSame([], $edited['errors']);
         self::assertArrayNotHasKey('bearer_token', $edited['row'], 'blank on edit keeps the stored token');
@@ -140,10 +141,30 @@ final class ServerInputTest extends TestCase
     #[Test]
     public function trustSettingsAreTheOnlyEditableFieldsOfADiscoveredRow(): void
     {
-        $existing = ['name' => 'context7', 'source' => 'mcp_json', 'url' => 'https://a.test/mcp'];
-
-        $result = ServerInput::validateTrust(['read_only' => '1', 'url' => 'https://evil.test/mcp'], $existing);
+        $result = ServerInput::validateTrust(['read_only' => '1', 'url' => 'https://evil.test/mcp']);
 
         self::assertSame(['read_only' => true, 'output_public' => false], $result);
+    }
+
+    #[Test]
+    public function aStoredTokenIsNotCarriedToANewHost(): void
+    {
+        $existing = ['name' => 'docs_server', 'source' => 'manual', 'auth_type' => 'bearer',
+            'url' => 'https://mcp.example.com/mcp', 'bearer_token' => 's3cret'];
+
+        $samePath = ServerInput::validate(self::post(['auth_type' => 'bearer', 'url' => 'https://mcp.example.com/v2']), $existing);
+        $newHost = ServerInput::validate(self::post(['auth_type' => 'bearer', 'url' => 'https://attacker.example.net/mcp']), $existing);
+
+        self::assertSame([], $samePath['errors'], 'the same host may keep its token');
+        self::assertNotSame([], $newHost['errors'], 'a new host needs the token typed again');
+    }
+
+    #[Test]
+    public function switchingToBearerNeedsAToken(): void
+    {
+        $existing = ['name' => 'docs_server', 'source' => 'manual', 'auth_type' => 'none',
+            'url' => 'https://mcp.example.com/mcp', 'bearer_token' => ''];
+
+        self::assertNotSame([], ServerInput::validate(self::post(['auth_type' => 'bearer']), $existing)['errors']);
     }
 }

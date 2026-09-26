@@ -90,6 +90,19 @@ final class OAuthAuthenticatorTest extends TestCase
     }
 
     #[Test]
+    public function rateLimitingDuringRefreshKeepsTheConnection(): void
+    {
+        foreach ([408, 429] as $status) {
+            $this->tokens->save(1, 'remote', ['access_token' => 'old', 'refresh_token' => 'rt', 'expires_in' => 3600]);
+            $oauth = $this->createStub(OAuthClient::class);
+            $oauth->method('refresh')->willThrowException(new OAuthException('busy', $status));
+
+            self::assertFalse($this->authenticator($oauth)->onUnauthorized(1));
+            self::assertNotNull($this->tokens->find(1, 'remote'), $status . ' is temporary');
+        }
+    }
+
+    #[Test]
     public function aTransportErrorDuringRefreshKeepsTheConnection(): void
     {
         $this->tokens->save(1, 'remote', ['access_token' => 'old', 'refresh_token' => 'rt', 'expires_in' => 3600]);

@@ -155,13 +155,13 @@ final class ServerAdminServiceTest extends TestCase
     #[Test]
     public function aDiscoveredRowIsNeitherDeletedNorFullyEdited(): void
     {
-        $this->servers->add('context7', true, 'mcp_json', ['transport' => 'http', 'url' => 'https://a.test/mcp']);
+        $this->servers->add('docs', true, 'mcp_json', ['transport' => 'http', 'url' => 'https://a.test/mcp']);
 
-        $this->service->save(['read_only' => '1', 'url' => 'https://evil.test/mcp', 'label' => 'X'], 'context7');
+        $this->service->save(['read_only' => '1', 'url' => 'https://evil.test/mcp', 'label' => 'X'], 'docs');
 
-        self::assertTrue($this->servers->rows['context7']['read_only'], 'trust settings are the admin\'s');
-        self::assertSame('https://a.test/mcp', $this->servers->rows['context7']['url'], 'connection details are the source\'s');
+        self::assertTrue($this->servers->rows['docs']['read_only'], 'trust settings are the admin\'s');
+        self::assertSame('https://a.test/mcp', $this->servers->rows['docs']['url'], 'connection details are the source\'s');
         $this->expectException(\InvalidArgumentException::class);
-        $this->service->delete('context7');
+        $this->service->delete('docs');
     }
 }

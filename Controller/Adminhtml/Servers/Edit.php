@@ -12,6 +12,7 @@ use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\Controller\ResultInterface;
 use Magento\Framework\View\Result\PageFactory;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
+use MagoAssistant\Mcp\Block\Adminhtml\ServerForm;
 
 /**
  * The form for one server: everything of a manual row, the trust settings and connection of any other.
@@ -33,6 +34,7 @@ class Edit extends Action implements HttpGetActionInterface
         $name = (string)$this->getRequest()->getParam('name', '');
         $row = $name === '' ? null : $this->servers->getByName($name);
         if ($row === null) {
+            $this->_session->getData(ServerForm::FORM_DATA_KEY, true);
             $this->messageManager->addErrorMessage(__('No MCP server named "%1".', $name));
 
             return $this->resultRedirectFactory->create()->setPath('mago_mcp/servers/index');

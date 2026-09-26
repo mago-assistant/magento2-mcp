@@ -10,6 +10,8 @@ use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Framework\Serialize\Serializer\Json;
 use MagoAssistant\Mago\Logger\ErrorLogger;
+use MagoAssistant\Mcp\Service\OAuth\ClientRepository;
+use MagoAssistant\Mcp\Service\OAuth\TokenRepository;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
 use MagoAssistant\Mcp\Service\Discovery\NameMigration;
@@ -25,7 +27,9 @@ class Repository implements ServerRepositoryInterface
         private readonly Json $json,
         private readonly ServerMerger $merger,
         private readonly EncryptorInterface $encryptor,
-        private readonly ErrorLogger $errorLogger
+        private readonly ErrorLogger $errorLogger,
+        private readonly TokenRepository $tokens,
+        private readonly ClientRepository $clients
     ) {
     }
 
@@ -118,6 +122,11 @@ class Repository implements ServerRepositoryInterface
             $names[] = $server->name;
         }
         foreach ($plan['update'] as $server) {
+            if (ServerMerger::credentialsStale($server, $existing[$server->name] ?? [])) {
+                // A token is never sent to a host it was not issued for.
+                $this->tokens->deleteForServer($server->name);
+                $this->clients->delete($server->name);
+            }
             $this->save(ServerMerger::updatedRow($server, $existing[$server->name] ?? []));
             $names[] = $server->name;
         }

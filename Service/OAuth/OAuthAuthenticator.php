@@ -76,7 +76,7 @@ class OAuthAuthenticator implements AuthenticatorInterface
         try {
             $token = $this->oauthClient->refresh($client['metadata'], $client, $refreshToken);
         } catch (OAuthException $e) {
-            if ($e->getCode() >= 400 && $e->getCode() < 500) {
+            if ($e->getCode() >= 400 && $e->getCode() < 500 && !in_array($e->getCode(), [408, 429], true)) {
                 $this->tokenRepository->delete($userId, $this->serverCode);
             }
             return null;
