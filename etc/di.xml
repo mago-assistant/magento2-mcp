@@ -20,6 +20,17 @@
             <argument name="httpClient" xsi:type="object">MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient</argument>
         </arguments>
     </type>
+    <type name="MagoAssistant\Mcp\Service\OAuth\OAuthClient">
+        <arguments>
+            <argument name="httpClient" xsi:type="object">MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient</argument>
+        </arguments>
+    </type>
+    <!-- The backend session is touched only when an OAuth request needs it. -->
+    <type name="MagoAssistant\Mcp\Service\OAuth\PendingAuthorizationStore">
+        <arguments>
+            <argument name="session" xsi:type="object">Magento\Backend\Model\Session\Proxy</argument>
+        </arguments>
+    </type>
 
     <type name="MagoAssistant\Mcp\Service\Discovery\ServerScanner">
         <arguments>
