@@ -30,10 +30,13 @@ and delivered in four plans:
 2. **HTTP without OAuth** (done): `HttpTransport`, none and bearer authentication, module-shipped
    server definitions, `.mcp.json` http import, encrypted bearer tokens, allowed tools, server
    instructions once per request.
-3. **OAuth and per-admin gating** (next): the OAuth authenticator and its controllers, a tool offered
-   only to an admin who has connected, "replaces skill".
-4. **Admin form and release** (after that): add, edit and delete a remote server by hand, Transport and
-   Auth columns in the grid, token cleanup, README and CHANGELOG, phpstan, version 1.0.0.
+3. **OAuth and per-admin gating** (done): the OAuth authenticator and its controllers, a tool offered
+   and run only for an admin who has connected, "replaces skill".
+4. **Admin form and release** (done): add, edit and delete a remote server, read-only servers, Transport
+   and Auth columns in the grid, token cleanup, README and CHANGELOG, phpstan, version 1.0.0.
+
+Every plan ended with a review by a fresh reviewer; every Critical or Important finding was fixed with a
+test that failed first.
 
 ## The key decisions
 
@@ -45,11 +48,13 @@ and delivered in four plans:
 | Arguments? | The stdio branch's coercion and validation before the card. | The model sends `"3"` for an integer; refusing a call that would fail anyway spares the admin a pointless confirmation. |
 | Names? | `mcp_<server>__<tool>`, lower-case, cut and hashed above 64 characters, from the HTTP branch. | One provider caps names at 64; server names are normalised to `[a-z0-9_]` so the name is unambiguous. |
 | Where do servers live? | One table and one grid, the stdio branch's, grown with the http columns; four sources: module, Composer, `.mcp.json`, manual. | Any number of servers, each enabled or disabled, discovered or added, instead of one configurable server plus code-defined extras. |
+| Read-only servers? | An administrator can declare a whole server read-only: its tools skip the card. Added on the owner's request after a documentation server's harmless tools all classified as writes. | The classifier stays cautious for everything else; the declaration is per server, visible in the grid, and the admin's own. |
+| Who owns a row? | The source owns a discovered row's connection details; the administrator owns every row's trust settings (enabled, read-only, public output), which a rescan keeps. | Otherwise a rescan would undo a read-only or public setting on a `.mcp.json` server. |
 | Per-tool controls? | None. A tool's type is fixed; who may use it is Mago's ACL and per-user table. | Both branches had already reached this; MCP tools behave exactly like Mago's own skills. |
 | Vendor servers? | The module ships **no** vendor definition. Any module registers a `ServerDefinition` in `di.xml`; the registry's default is empty. | The owner has no RUMvision account or server, and a vendor server is that vendor's module's business. The mechanism is generic; the HTTP branch's `di.xml` and `config.xml` hold RUMvision's values for whoever builds that module. |
-| Admin identity? | Explicit. Null means no user; a tool call carries the admin id today, and plan 3 makes the plugin and catalog pass it too; CLI and cron pass null. Nothing reads the admin session. | The HTTP branch silently fell back to the logged-in admin, which made "discovery with no user" mean different things in the web and the CLI. |
+| Admin identity? | Explicit. Null means no user; the plugin, the catalog and every tool call pass the real admin id; CLI and cron pass null. Nothing reads the admin session. | The HTTP branch silently fell back to the logged-in admin, which made "discovery with no user" mean different things in the web and the CLI. |
 | OAuth for whom? | Manage-only in 1.0: connecting happens on the server edit page behind `MagoAssistant_Mcp::manage`. | Simplest secure layout; a connections page for admins with only the use permission can come later. |
-| Version? | 1.0.0 on release (`composer.json` still says 2.0.0 until plan 4). | Neither branch was released; the stdio branch's "2.0.0" and the HTTP branch's "0.1.0" were internal. |
+| Version? | 1.0.0. | Neither branch was released; the stdio branch's "2.0.0" and the HTTP branch's "0.1.0" were internal. |
 | History? | Both authors. The merge commit carries both parents; every commit that ports HTTP-branch code names its author as co-author. | The HTTP client, the authenticators and the OAuth code are that author's work. |
 
 ## What each branch contributed

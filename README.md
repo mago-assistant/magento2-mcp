@@ -15,10 +15,7 @@ own, over either of two transports:
 The module is generic: it knows no vendor server. Which servers exist is entirely a matter of what is
 installed, what `.mcp.json` says, and which definitions modules register.
 
-**Status:** version 1.0.0 is under development on branch `feature/mcp-http-and-stdio` (`composer.json`
-still says 2.0.0 until the release step changes it). Per-admin OAuth for remote servers and an admin form
-for adding a remote server by hand are the next two steps; see `MERGE.md` for how this branch came to be
-and what is still to come.
+Version 1.0.0; see `CHANGELOG.md`. `MERGE.md` explains how two earlier implementations became this one.
 
 ## Install
 
@@ -57,14 +54,16 @@ what an administrator may change:
 | `composer` | stdio | a Composer package with an `extra.mago-mcp` block or an `*mcp*` binary | enable, disable |
 | `mcp_json` | stdio or http | the Magento root's `.mcp.json` (when enabled in config) | enable, disable |
 | `module` | stdio or http | a `ServerDefinition` any module registers in `di.xml` | enable, disable |
-| `manual` | http | an administrator (the Add form is not built yet) | everything |
+| `manual` | http | an administrator, with Add server on the grid | everything |
 
 Sources run in the order module, Composer, `.mcp.json`. The first source to yield a name wins; a later
 copy of the same name is logged and dropped. A `manual` row is never touched by a scan.
 
 Discovery never enables anything by itself. It only makes a server visible so an administrator can
-turn it on. A rescan re-applies every discovered row's fields from its source, keeping only `enabled`
-(and a stored bearer token when the source supplies none). A server a source no longer yields, a
+turn it on. The source owns a discovered row's connection details; the administrator owns every row's
+**trust settings**: enabled, read-only and public output. A rescan re-applies the connection details from
+the source and keeps the trust settings (and a stored bearer token when the source supplies none); a
+source's values for the trust settings count only when the row is first inserted. A server a source no longer yields, a
 removed package, a disabled module, `.mcp.json` scanning switched off, is flagged Missing in the grid
 and in `mago:mcp:discover`, but stays enabled until you disable it.
 
@@ -78,6 +77,14 @@ trailing `_mcp_server` or `_mcp` are removed, each only if something remains. A 
 
 In the admin: **Stores > Admin Assistant > MCP Servers** is a grid of known servers with Enable and
 Disable per row and Rescan and Refresh tool lists as toolbar buttons.
+
+**Add server** opens a form for a remote server: label, URL, authentication, bearer token, allowed tools,
+timeout, the skill it replaces, and the trust settings. The name is derived from the label once and never
+changes, because it keys OAuth tokens, the cache and the per-user permission rows. A blank token field on
+edit keeps the stored token, which is never shown again. **Edit** on a discovered row shows its
+connection details as text and changes only its trust settings. **Delete** is offered on rows added here;
+it removes every admin's OAuth tokens and the client registration with the row, and so does changing an
+OAuth server's URL.
 
 Once a server is enabled, each of its tools appears as its own row, `mcp_<server>__<tool>`, in
 **Stores > Admin Assistant > Skills & Permissions** beside Mago's own skills, with Mago's own per-user
@@ -97,10 +104,30 @@ bin/magento mago:mcp:refresh [<server>]  # drop the cached tool list (all server
 ## Remote servers over HTTP
 
 A remote server speaks MCP's Streamable HTTP transport (specification 2025-06-18): one endpoint,
-JSON or SSE-formatted responses, a session id the server may hand out. Authentication is `none` or
-`bearer`, a static token shared by every admin; OAuth per admin is the next step and until then a row
-with `auth_type = oauth` exposes no tools and writes "needs an OAuth connection" to
-`var/log/mago-error.log` on every request that lists tools (it is neither cached nor shown in the grid).
+JSON or SSE-formatted responses, a session id the server may hand out. Authentication is `none`,
+`bearer` (a static token shared by every admin, stored encrypted), or `oauth`.
+
+A 401 names the fix for the row's authentication: reconnect your account, check the bearer token, or
+add authentication the server requires.
+
+### OAuth: each admin connects their own account
+
+For an `oauth` row, the grid and the edit page show **Connect my account** to the logged-in admin. It
+registers this Magento install at the server's authorization server once (dynamic client registration,
+RFC 7591, found through the server's own metadata), sends the admin there to log in (authorization code
+with PKCE and the `resource` indicator), and stores the admin's token encrypted. Tokens are refreshed
+shortly before they expire; a refresh the authorization server rejects disconnects the admin, an outage
+does not.
+
+- A connection belongs to one admin. An OAuth server's tools are offered, and run, only for admins who
+  connected; nobody can use another admin's connection. Deleting an admin user deletes their tokens.
+- The tool list is fetched the first time a connected admin needs it and then cached for everyone, so
+  it shows on Skills & Permissions; only who may call the tools is per admin.
+- Connecting is part of the servers page, which requires the `MCP Servers` resource (manage). An admin
+  with only `MCP Tools - Read`/`Write` cannot connect and is therefore never offered an OAuth server's
+  tools.
+- **Replaces skill**: a Mago skill named on the row is hidden, and blocked, for every admin the server
+  is offered to, so the assistant does not get the same data twice. Everyone else keeps the skill.
 
 ### From `.mcp.json`
 
@@ -169,10 +196,10 @@ name; everything else has a default, and `transport` defaults to `http`. A stdio
 `transport` to `stdio` and gives `command` (an array), `env` and `cwd` instead of `url` and `authType`.
 When two modules register the same name, the last registered definition wins. The storable fields
 (label, transport, URL, auth, allowed tools, timeout, output public, replaces skill) become the row; on
-every rescan the definition wins over the row for all of them except `enabled`, so a module update takes
-effect without an admin action. The per-tool field classification and the error hints are never stored:
-the catalog reads them from the definition each time. `replacesSkill` is stored but has no effect until
-the OAuth step.
+every rescan the definition wins over the row for the connection details, so a module update takes effect
+without an admin action; `readOnly` and `outputPublic` count only when the row is first inserted, after
+which they are the administrator's. The per-tool field classification and the error hints are never
+stored: the catalog reads them from the definition each time, for the row the module created only.
 
 A token given in `di.xml` stays plain text in that file and in `generated/` metadata; only the database
 copy is encrypted. This module registers no definition itself. The registry's default is empty.
@@ -208,6 +235,15 @@ drops its cached list; `mago:mcp:refresh` drops it so the next use re-fetches.
 
 While a call runs, the chat panel shows the skill's own name as the tag and a plain phrase built from
 the tool name (`Getting order...`) as the status line.
+
+## Read-only servers
+
+An administrator can declare a server **read-only** on its edit page. Every tool of that server is then a
+`read` (shown as `read (server)` in `mago:mcp:list`), runs without the confirmation card, and is never
+flagged irreversible, whatever its name says. Use it for a server whose tools cannot change anything,
+such as a documentation lookup; the classifier below is deliberately cautious and would otherwise send
+names like `resolve-library-id` or `query-docs` through the card. A module definition can set
+`readOnly` as the starting value.
 
 ## Read or write
 
@@ -264,8 +300,8 @@ information; neither changes a tool's type.
 ## Results and privacy
 
 A tool's result reaches the model in one of two shapes, chosen by the server row's **output public**
-flag. In this version only a module definition sets that flag (`outputPublic`); Composer and `.mcp.json`
-rows are always non-public, and no administrator setting changes it yet:
+flag, one of the trust settings an administrator sets on the edit page (a module definition can set its
+starting value with `outputPublic`):
 
 - **Not public** (the default, and the right setting for a local server that returns customer data):
   the result is one text string, declared public so Mago's heuristic scrub and vault concealment run
@@ -352,10 +388,10 @@ writes metadata, the skill, argument keys, whether the result was an error, and 
 and character length, to `var/log/mago-debug.log`. Raw tool arguments, raw result text and tokens are
 never written to any log.
 
-## Limits of this version
+## Limits
 
-- **Per-admin OAuth is not built yet.** An http row with `auth_type = oauth` exposes no tools.
-- **No admin form for a remote server yet.** Add one through `.mcp.json` or a module definition.
+- **OAuth is manage-only.** Connecting happens on the servers page; an admin without that resource cannot
+  connect and is never offered an OAuth server's tools.
 - **The registry plugin depends on Mago's `ToolRegistry` and `ChatService`, not `@api`.** If Mago
   renames their public methods or the `tool_status` event shape, MCP skills disappear from the list or
   the status-line phrase falls back to Mago's generic message until the plugin is updated.
@@ -377,9 +413,10 @@ From the Magento root:
 ```bash
 vendor/bin/phpunit -c app/code/MagoAssistant/Mcp/phpunit.xml.dist app/code/MagoAssistant/Mcp/Test/Unit
 vendor/bin/phpcs --standard=app/code/MagoAssistant/Mcp/phpcs.xml app/code/MagoAssistant/Mcp
+vendor/bin/phpstan analyse -c app/code/MagoAssistant/Mcp/phpstan.neon.dist app/code/MagoAssistant/Mcp
 ```
 
-or, from inside the module directory after `composer install`: `composer test` and `composer lint`.
+or, from inside the module directory after `composer install`: `composer test`, `composer lint` and `composer analyse`.
 
 Tests are unit tests with fakes, not mocks. The stdio transport tests run a real fake MCP server over a
 real process (`Test/Unit/Fakes/fake-mcp-server.php`); the HTTP transport tests use Symfony's
