@@ -218,7 +218,8 @@ class StdioSession
             $this->buffer .= $chunk;
         }
         if (strpos($this->buffer, "\n") === false && feof($this->pipes[1])) {
-            $status = proc_get_status($this->process);
+            // The process may already have been closed; its exit code is then unknown.
+            $status = is_resource($this->process) ? proc_get_status($this->process) : ['running' => true, 'exitcode' => -1];
             $first = strtok($this->stderr, "\n") ?: 'no output';
             throw new McpProcessException(sprintf(
                 'MCP server "%s" exited (code %s) before answering: %s',

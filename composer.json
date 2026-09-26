@@ -2,7 +2,7 @@
     "name": "mago-assistant/magento2-mcp",
     "description": "Mago Assistant addon: every tool of an installed MCP server becomes a Mago skill",
     "type": "magento2-module",
-    "version": "2.0.0",
+    "version": "1.0.0",
     "license": "MIT",
     "keywords": [
         "magento",
@@ -42,6 +42,7 @@
     "require-dev": {
         "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
         "magento/magento-coding-standard": "*",
+        "phpstan/phpstan": "^1.12 || ^2.0",
         "phpunit/phpunit": "^10.5 || ^11.0 || ^12.0",
         "psr/log": "^1.1 || ^2.0 || ^3.0"
     },
@@ -59,7 +60,8 @@
     "scripts": {
         "test": "phpunit",
         "lint": "phpcs --standard=phpcs.xml .",
-        "lint-fix": "phpcbf --standard=phpcs.xml ."
+        "lint-fix": "phpcbf --standard=phpcs.xml .",
+        "analyse": "phpstan analyse -c phpstan.neon.dist"
     },
     "config": {
         "sort-packages": true,

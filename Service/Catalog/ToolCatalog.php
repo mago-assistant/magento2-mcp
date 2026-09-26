@@ -359,7 +359,7 @@ class ToolCatalog
             }
             $this->servers->setLastError($name, $e->getMessage());
             $this->cache->save(
-                json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                $this->encode(['error' => $e->getMessage()]),
                 $this->cacheId($name),
                 [McpTools::CACHE_TAG],
                 self::FAILURE_LIFETIME
@@ -369,7 +369,7 @@ class ToolCatalog
         }
         $fetched = ['tools' => $result['tools'], 'instructions' => $result['instructions']];
         $this->cache->save(
-            json_encode($fetched, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            $this->encode($fetched),
             $this->cacheId($name),
             [McpTools::CACHE_TAG],
             $this->config->getCacheLifetime()
@@ -415,6 +415,20 @@ class ToolCatalog
         return ($row['source'] ?? '') === DiscoveredServer::SOURCE_MODULE
             ? $this->definitions->get((string)$row['name'])
             : null;
+    }
+
+    /**
+     * A server's text is not guaranteed to be valid UTF-8; a failed encode would cache an empty string and
+     * re-fetch the server on every request, so bad bytes become U+FFFD instead.
+     *
+     * @param array<string,mixed> $data
+     */
+    private function encode(array $data): string
+    {
+        return (string)json_encode(
+            $data,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
     }
 
     private function memoKey(string $name, ?int $adminUserId): string

@@ -20,7 +20,7 @@ class SkillRegistry
 {
     private const NAME_PATTERN = '/^[A-Za-z0-9_-]{1,64}$/';
 
-    /** @var array<string,McpSkill[]> skills keyed by name, per admin id ("" for none), once per request */
+    /** @var array<int|string,McpSkill[]> skills keyed by name, per admin id ("" for none), once per request */
     private array $skills = [];
 
     public function __construct(

@@ -398,6 +398,18 @@ final class ToolCatalogTest extends TestCase
     }
 
     #[Test]
+    public function aToolListWithInvalidUtf8IsStillCached(): void
+    {
+        $this->servers->add('odd', true);
+        $this->transport->tools['odd'] = [['name' => 'thing-get', 'description' => "bad \xB1 byte", 'inputSchema' => ['type' => 'object']]];
+
+        $this->catalog()->entries();
+        $this->catalog()->entries();
+
+        self::assertSame(1, $this->transport->listCalls, 'fetched once, then served from the cache');
+    }
+
+    #[Test]
     public function serverConfigResolvesEnabledServersOnly(): void
     {
         $this->servers->add('demo', true);
