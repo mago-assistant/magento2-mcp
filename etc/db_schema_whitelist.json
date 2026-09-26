@@ -1,0 +1,64 @@
+{
+    "mago_mcp_server": {
+        "column": {
+            "server_id": true,
+            "name": true,
+            "command": true,
+            "env": true,
+            "cwd": true,
+            "label": true,
+            "transport": true,
+            "url": true,
+            "auth_type": true,
+            "bearer_token": true,
+            "allowed_tools": true,
+            "timeout": true,
+            "output_public": true,
+            "replaces_skill": true,
+            "read_only": true,
+            "source": true,
+            "enabled": true,
+            "policy": true,
+            "missing": true,
+            "tool_overrides": true,
+            "last_error": true,
+            "created_at": true,
+            "updated_at": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "MAGO_MCP_SERVER_NAME": true
+        }
+    },
+    "mago_mcp_oauth_client": {
+        "column": {
+            "server_code": true,
+            "server_url": true,
+            "redirect_uri": true,
+            "client_id": true,
+            "client_secret": true,
+            "metadata": true,
+            "created_at": true
+        },
+        "constraint": {
+            "PRIMARY": true
+        }
+    },
+    "mago_mcp_token": {
+        "column": {
+            "entity_id": true,
+            "admin_user_id": true,
+            "server_code": true,
+            "access_token": true,
+            "refresh_token": true,
+            "expires_at": true,
+            "scope": true,
+            "updated_at": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "MAGO_MCP_TOKEN_USER_SERVER": true,
+            "MAGO_MCP_TOKEN_ADMIN_USER_ID_ADMIN_USER_USER_ID": true
+        }
+    }
+}

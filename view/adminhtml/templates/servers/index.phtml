@@ -1,0 +1,97 @@
+<?php
+/**
+ * Copyright © Mago Assistant
+ */
+
+/** @var \MagoAssistant\Mcp\Block\Adminhtml\Servers $block */
+/** @var \Magento\Framework\Escaper $escaper */
+$servers = $block->getServers();
+?>
+
+<div class="admin__page-section">
+    <div class="admin__page-section-title">
+        <span class="title"><?= $escaper->escapeHtml(__('MCP servers found in this project')) ?></span>
+    </div>
+    <div class="admin__page-section-content">
+        <p><?= $escaper->escapeHtml(__('Nothing is exposed to the assistant until a server is enabled here. Each tool of an enabled server then appears in Skills & Permissions with its own per-user permission. A server that is not found here can be added as a stdio or http entry in the Magento root\'s .mcp.json, or shipped by a module as a definition. An OAuth server\'s tools reach only the admins who connected their own account.')) ?></p>
+        <div class="admin__page-actions">
+            <a class="action-primary mago-mcp-inline-form" href="<?= $escaper->escapeUrl($block->getNewUrl()) ?>"><?= $escaper->escapeHtml(__('Add server')) ?></a>
+            <form method="post" action="<?= $escaper->escapeUrl($block->getRescanUrl()) ?>" class="mago-mcp-inline-form">
+                <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+                <button type="submit" class="action-default"><?= $escaper->escapeHtml(__('Rescan')) ?></button>
+            </form>
+            <form method="post" action="<?= $escaper->escapeUrl($block->getRefreshUrl()) ?>" class="mago-mcp-inline-form">
+                <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+                <button type="submit" class="action-default"><?= $escaper->escapeHtml(__('Refresh tool lists')) ?></button>
+            </form>
+        </div>
+        <table class="data-grid">
+            <thead>
+                <tr>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Name')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Source')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Transport')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Auth')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Command or URL')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Enabled')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Tools')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Status')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Actions')) ?></th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($servers as $server): ?>
+                <tr>
+                    <td><?= $escaper->escapeHtml($server['name']) ?></td>
+                    <td><?= $escaper->escapeHtml($server['source']) ?></td>
+                    <td><?= $escaper->escapeHtml($server['transport']) ?></td>
+                    <td><?= $escaper->escapeHtml($server['auth_type']) ?></td>
+                    <td><code><?= $escaper->escapeHtml($server['transport'] === 'http' ? $server['url'] : implode(' ', $server['command'])) ?></code></td>
+                    <td><?= $escaper->escapeHtml($server['enabled'] ? __('Yes') : __('No')) ?></td>
+                    <td><?= $server['enabled'] ? (int)$server['tools_total'] : '—' ?></td>
+                    <td>
+                        <?php if ($server['read_only']): ?>
+                            <span class="grid-severity-notice"><?= $escaper->escapeHtml(__('Read-only')) ?></span>
+                        <?php endif; ?>
+                        <?php if ($server['output_public']): ?>
+                            <span class="grid-severity-notice"><?= $escaper->escapeHtml(__('Public output')) ?></span>
+                        <?php endif; ?>
+                        <?php if ($server['missing']): ?>
+                            <span class="grid-severity-major"><?= $escaper->escapeHtml(__('Missing')) ?></span>
+                        <?php endif; ?>
+                        <?php if ($server['last_error']): ?>
+                            <span class="grid-severity-critical"><?= $escaper->escapeHtml($server['last_error']) ?></span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <form method="post" action="<?= $escaper->escapeUrl($block->getToggleUrl()) ?>" class="mago-mcp-inline-form">
+                            <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+                            <input type="hidden" name="name" value="<?= $escaper->escapeHtmlAttr($server['name']) ?>"/>
+                            <button type="submit" class="action-tertiary">
+                                <?= $escaper->escapeHtml($server['enabled'] ? __('Disable') : __('Enable')) ?>
+                            </button>
+                        </form>
+                        <a class="action-tertiary" href="<?= $escaper->escapeUrl($block->getEditUrl($server['name'])) ?>"><?= $escaper->escapeHtml(__('Edit')) ?></a>
+                        <?php if ($block->isManual($server)): ?>
+                            <form method="post" action="<?= $escaper->escapeUrl($block->getDeleteUrl()) ?>"
+          onsubmit="return confirm('<?= $escaper->escapeJs(__('Delete this server, and every admin\'s connection to it?')) ?>');" class="mago-mcp-inline-form">
+                                <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+                                <input type="hidden" name="name" value="<?= $escaper->escapeHtmlAttr($server['name']) ?>"/>
+                                <button type="submit" class="action-tertiary"><?= $escaper->escapeHtml(__('Delete')) ?></button>
+                            </form>
+                        <?php endif; ?>
+                        <?php if ($block->hasConnection($server)): ?>
+                            <?php if ($block->isConnected($server)): ?>
+                                <a class="action-tertiary" href="<?= $escaper->escapeUrl($block->getDisconnectUrl($server['name'])) ?>"><?= $escaper->escapeHtml(__('Disconnect my account')) ?></a>
+                            <?php else: ?>
+                                <a class="action-tertiary" href="<?= $escaper->escapeUrl($block->getConnectUrl($server['name'])) ?>"><?= $escaper->escapeHtml(__('Connect my account')) ?></a>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<style>.mago-mcp-inline-form { display: inline-block; margin-right: 1rem; }</style>

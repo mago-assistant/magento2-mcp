@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <preference for="MagoAssistant\Mcp\Api\ServerRepositoryInterface" type="MagoAssistant\Mcp\Model\Server\Repository"/>
+
+    <type name="MagoAssistant\Mcp\Service\Transport\TransportResolver">
+        <arguments>
+            <argument name="transports" xsi:type="array">
+                <item name="stdio" xsi:type="object">MagoAssistant\Mcp\Service\Transport\StdioTransport</item>
+                <!-- A proxy: the Symfony client is built only when an http server is actually used. -->
+                <item name="http" xsi:type="object">MagoAssistant\Mcp\Service\Transport\HttpTransport\Proxy</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- The one place a Symfony HTTP client is chosen; HttpTransport takes the interface, tests pass MockHttpClient. -->
+    <virtualType name="MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient" type="Symfony\Component\HttpClient\CurlHttpClient"/>
+    <type name="MagoAssistant\Mcp\Service\Transport\HttpTransport">
+        <arguments>
+            <argument name="httpClient" xsi:type="object">MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient</argument>
+        </arguments>
+    </type>
+    <type name="MagoAssistant\Mcp\Service\OAuth\OAuthClient">
+        <arguments>
+            <argument name="httpClient" xsi:type="object">MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient</argument>
+        </arguments>
+    </type>
+    <!-- The backend session is touched only when an OAuth request needs it. -->
+    <type name="MagoAssistant\Mcp\Service\OAuth\PendingAuthorizationStore">
+        <arguments>
+            <argument name="session" xsi:type="object">Magento\Backend\Model\Session\Proxy</argument>
+        </arguments>
+    </type>
+
+    <type name="MagoAssistant\Mcp\Service\Discovery\ServerScanner">
+        <arguments>
+            <argument name="sources" xsi:type="array">
+                <item name="module" xsi:type="object">MagoAssistant\Mcp\Service\Discovery\ModuleSource</item>
+                <item name="composer" xsi:type="object">MagoAssistant\Mcp\Service\Discovery\ComposerSource</item>
+                <item name="mcp_json" xsi:type="object">MagoAssistant\Mcp\Service\Discovery\McpJsonSource</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!--
+        Servers a module ships: register a ServerDefinition virtual type as an item of "definitions"
+        (name, label, transport, url or command, authType, allowedTools, timeout, outputPublic,
+        replacesSkill, fieldClassificationOverrides, errorHints). This module ships none of its own.
+    -->
+    <type name="MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry">
+        <arguments>
+            <argument name="definitions" xsi:type="array"/>
+        </arguments>
+    </type>
+
+    <!--
+        Optional constructor parameters are NOT auto-injected by Magento's object manager (the default
+        value wins), so the two that matter at runtime are wired here explicitly.
+    -->
+    <type name="MagoAssistant\Mcp\Service\Catalog\ToolCatalog">
+        <arguments>
+            <argument name="cache" xsi:type="object">MagoAssistant\Mcp\Model\Cache\Type\McpTools</argument>
+            <argument name="authenticators" xsi:type="object">MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver</argument>
+        </arguments>
+    </type>
+    <type name="MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver">
+        <arguments>
+            <!-- A proxy: the OAuth client and its HTTP client are built only when an OAuth server is used. -->
+            <argument name="oauthFactory" xsi:type="object">MagoAssistant\Mcp\Service\OAuth\OAuthAuthenticatorFactory\Proxy</argument>
+        </arguments>
+    </type>
+
+    <!--
+        One Mago skill per MCP tool, added to Mago's registry through "after" plugins (no preference,
+        no around). Nothing inside MagoAssistant_Mago is edited.
+    -->
+    <type name="MagoAssistant\Mago\Service\Tool\ToolRegistry">
+        <plugin name="mago_mcp_skills" type="MagoAssistant\Mcp\Plugin\ToolRegistryMcpSkills"/>
+    </type>
+
+    <!-- Status line only: 'Running <name>...' becomes a phrase such as 'Getting order...'; the tag is the skill name already. -->
+    <type name="MagoAssistant\Mago\Service\Ai\ChatService">
+        <plugin name="mago_mcp_tool_display" type="MagoAssistant\Mcp\Plugin\ChatServiceToolDisplay"/>
+    </type>
+
+    <!--
+        The grid and the edit page read the logged-in admin only to show that admin's own connection state;
+        the connection service is a proxy so no OAuth or HTTP client is built for pages without OAuth rows.
+    -->
+    <type name="MagoAssistant\Mcp\Service\Admin\ConnectionState">
+        <arguments>
+            <argument name="authSession" xsi:type="object">Magento\Backend\Model\Auth\Session\Proxy</argument>
+            <argument name="connections" xsi:type="object">MagoAssistant\Mcp\Service\OAuth\ConnectionService\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="MagoAssistant\Mcp\Block\Adminhtml\ServerForm">
+        <arguments>
+            <argument name="backendSession" xsi:type="object">Magento\Backend\Model\Session\Proxy</argument>
+        </arguments>
+    </type>
+
+    <type name="Magento\Framework\Console\CommandListInterface">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="mago_mcp_discover" xsi:type="object">MagoAssistant\Mcp\Console\Command\DiscoverServers</item>
+                <item name="mago_mcp_list" xsi:type="object">MagoAssistant\Mcp\Console\Command\ListServers</item>
+                <item name="mago_mcp_refresh" xsi:type="object">MagoAssistant\Mcp\Console\Command\RefreshTools</item>
+                <item name="mago_mcp_enable" xsi:type="object">MagoAssistant\Mcp\Console\Command\EnableServer</item>
+                <item name="mago_mcp_disable" xsi:type="object">MagoAssistant\Mcp\Console\Command\DisableServer</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

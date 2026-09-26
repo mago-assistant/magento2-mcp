@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <mago>
+            <mcp>
+                <enabled>1</enabled>
+                <scan_mcp_json>1</scan_mcp_json>
+                <process_timeout>60</process_timeout>
+                <cache_lifetime>3600</cache_lifetime>
+                <max_result_chars>16000</max_result_chars>
+            </mcp>
+        </mago>
+    </default>
+</config>
