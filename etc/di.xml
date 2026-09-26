@@ -72,6 +72,13 @@
         <plugin name="mago_mcp_tool_display" type="MagoAssistant\Mcp\Plugin\ChatServiceToolDisplay"/>
     </type>
 
+    <!-- The grid reads the logged-in admin only to show that admin's own connection state. -->
+    <type name="MagoAssistant\Mcp\Block\Adminhtml\Servers">
+        <arguments>
+            <argument name="authSession" xsi:type="object">Magento\Backend\Model\Auth\Session\Proxy</argument>
+        </arguments>
+    </type>
+
     <type name="Magento\Framework\Console\CommandListInterface">
         <arguments>
             <argument name="commands" xsi:type="array">

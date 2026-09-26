@@ -13,7 +13,7 @@ $servers = $block->getServers();
         <span class="title"><?= $escaper->escapeHtml(__('MCP servers found in this project')) ?></span>
     </div>
     <div class="admin__page-section-content">
-        <p><?= $escaper->escapeHtml(__('Nothing is exposed to the assistant until a server is enabled here. Each tool of an enabled server then appears in Skills & Permissions with its own per-user permission. A server that is not found here can be added as a stdio entry in the Magento root\'s .mcp.json.')) ?></p>
+        <p><?= $escaper->escapeHtml(__('Nothing is exposed to the assistant until a server is enabled here. Each tool of an enabled server then appears in Skills & Permissions with its own per-user permission. A server that is not found here can be added as a stdio or http entry in the Magento root\'s .mcp.json, or shipped by a module as a definition. An OAuth server\'s tools reach only the admins who connected their own account.')) ?></p>
         <div class="admin__page-actions">
             <form method="post" action="<?= $escaper->escapeUrl($block->getRescanUrl()) ?>" class="mago-mcp-inline-form">
                 <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
@@ -29,7 +29,9 @@ $servers = $block->getServers();
                 <tr>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Name')) ?></th>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Source')) ?></th>
-                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Command')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Transport')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Auth')) ?></th>
+                    <th class="data-grid-th"><?= $escaper->escapeHtml(__('Command or URL')) ?></th>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Enabled')) ?></th>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Tools')) ?></th>
                     <th class="data-grid-th"><?= $escaper->escapeHtml(__('Status')) ?></th>
@@ -41,7 +43,9 @@ $servers = $block->getServers();
                 <tr>
                     <td><?= $escaper->escapeHtml($server['name']) ?></td>
                     <td><?= $escaper->escapeHtml($server['source']) ?></td>
-                    <td><code><?= $escaper->escapeHtml(implode(' ', $server['command'])) ?></code></td>
+                    <td><?= $escaper->escapeHtml($server['transport']) ?></td>
+                    <td><?= $escaper->escapeHtml($server['auth_type']) ?></td>
+                    <td><code><?= $escaper->escapeHtml($server['transport'] === 'http' ? $server['url'] : implode(' ', $server['command'])) ?></code></td>
                     <td><?= $escaper->escapeHtml($server['enabled'] ? __('Yes') : __('No')) ?></td>
                     <td><?= $server['enabled'] ? (int)$server['tools_total'] : '—' ?></td>
                     <td>
@@ -60,6 +64,13 @@ $servers = $block->getServers();
                                 <?= $escaper->escapeHtml($server['enabled'] ? __('Disable') : __('Enable')) ?>
                             </button>
                         </form>
+                        <?php if ($block->hasConnection($server)): ?>
+                            <?php if ($block->isConnected($server)): ?>
+                                <a class="action-tertiary" href="<?= $escaper->escapeUrl($block->getDisconnectUrl($server['name'])) ?>"><?= $escaper->escapeHtml(__('Disconnect my account')) ?></a>
+                            <?php else: ?>
+                                <a class="action-tertiary" href="<?= $escaper->escapeUrl($block->getConnectUrl($server['name'])) ?>"><?= $escaper->escapeHtml(__('Connect my account')) ?></a>
+                            <?php endif; ?>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
