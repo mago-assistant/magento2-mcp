@@ -11,6 +11,7 @@ use Magento\Backend\App\Action\Context;
 use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\Controller\ResultInterface;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
+use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Discovery\ServerScanner;
 
 class Rescan extends Action implements HttpPostActionInterface
