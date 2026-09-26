@@ -65,7 +65,8 @@
     </type>
     <type name="MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver">
         <arguments>
-            <argument name="oauthFactory" xsi:type="object">MagoAssistant\Mcp\Service\OAuth\OAuthAuthenticatorFactory</argument>
+            <!-- A proxy: the OAuth client and its HTTP client are built only when an OAuth server is used. -->
+            <argument name="oauthFactory" xsi:type="object">MagoAssistant\Mcp\Service\OAuth\OAuthAuthenticatorFactory\Proxy</argument>
         </arguments>
     </type>
 
@@ -86,6 +87,7 @@
     <type name="MagoAssistant\Mcp\Block\Adminhtml\Servers">
         <arguments>
             <argument name="authSession" xsi:type="object">Magento\Backend\Model\Auth\Session\Proxy</argument>
+            <argument name="connections" xsi:type="object">MagoAssistant\Mcp\Service\OAuth\ConnectionService\Proxy</argument>
         </arguments>
     </type>
 

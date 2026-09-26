@@ -288,8 +288,10 @@ class OAuthClient
             $error = is_array($decoded)
                 ? trim(($decoded['error'] ?? '') . ' ' . ($decoded['error_description'] ?? ''))
                 : '';
+            // The status is the exception code, so a caller can tell a rejected grant (4xx) from an outage.
             throw new OAuthException(
-                sprintf('The authorization server answered HTTP %d%s.', $status, $error !== '' ? ': ' . $error : '')
+                sprintf('The authorization server answered HTTP %d%s.', $status, $error !== '' ? ': ' . $error : ''),
+                $status
             );
         }
 

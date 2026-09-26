@@ -36,8 +36,13 @@ class Servers extends Template
     public function getServers(): array
     {
         $counts = [];
+        $adminUserId = (int)$this->authSession->getUser()?->getId();
         foreach ($this->servers->getEnabled() as $row) {
-            $counts[$row['name']] = count($this->catalog->entriesForServer($row['name']));
+            // Counted for the viewing admin, so an OAuth server they connected shows its tools at once.
+            $counts[$row['name']] = count($this->catalog->entriesForServer(
+                $row['name'],
+                $adminUserId > 0 ? $adminUserId : null
+            ));
         }
         $rows = [];
         foreach ($this->servers->getAll() as $row) {

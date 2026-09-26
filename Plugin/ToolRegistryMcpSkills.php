@@ -10,7 +10,6 @@ use Magento\Framework\AuthorizationInterface;
 use MagoAssistant\Mago\Api\Tool\ToolInterface;
 use MagoAssistant\Mago\Logger\ErrorLogger;
 use MagoAssistant\Mago\Service\Tool\ToolRegistry;
-use MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Tool\Mcp\McpSkill;
 use MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry;
@@ -33,8 +32,7 @@ class ToolRegistryMcpSkills
         private readonly SkillRegistry $skills,
         private readonly ErrorLogger $errorLogger,
         private readonly AuthorizationInterface $authorization,
-        private readonly ToolCatalog $catalog,
-        private readonly AuthenticatorResolver $authenticators
+        private readonly ToolCatalog $catalog
     ) {
     }
 
@@ -87,17 +85,13 @@ class ToolRegistryMcpSkills
             $replaced = [];
             foreach ($this->skills->all($adminUserId) as $skill) {
                 $name = $skill->getName();
-                $server = $this->catalog->serverConfig($skill->entry()->server);
-                if (!isset($result[$name])
-                    && $server !== null
-                    && $this->catalog->connected($server, $adminUserId)
-                    && $subject->isCallAllowed($skill, [], $adminUserId)
-                    && $this->authorization->isAllowed($skill->getMagentoAcl())
-                ) {
-                    $added[$name] = $skill;
-                    if ($server->replacesSkill !== '') {
-                        $replaced[$server->replacesSkill] = true;
-                    }
+                if (isset($result[$name]) || !$this->offered($subject, $skill, $adminUserId)) {
+                    continue;
+                }
+                $added[$name] = $skill;
+                $replaces = $this->catalog->serverConfig($skill->entry()->server)?->replacesSkill ?? '';
+                if ($replaces !== '') {
+                    $replaced[$replaces] = true;
                 }
             }
             // The server is leading: the Mago skill it replaces is dropped for this admin only.
@@ -114,8 +108,11 @@ class ToolRegistryMcpSkills
     }
 
     /**
-     * Execution goes through getTool(), which never consults getEnabledTools(): so a replaced skill, and an
-     * OAuth server's skill for an admin without a connection, are blocked here too, not only hidden.
+     * Execution goes through getTool(), which never consults getEnabledTools(). Three things happen here:
+     * an OAuth skill Mago could not find by name (getToolByName() carries no admin, so with nothing cached
+     * the list was never fetched) is looked up for this admin, which is what makes a confirmed write run
+     * in its own fresh request; an OAuth skill of a server this admin has not connected is blocked; and a
+     * Mago skill a server replaces for this admin is blocked, not only hidden.
      *
      * @param ToolRegistry $subject
      * @param ToolInterface|null $result
@@ -129,22 +126,26 @@ class ToolRegistryMcpSkills
         string $name,
         ?int $adminUserId = null
     ): ?ToolInterface {
-        if ($result === null) {
-            return null;
-        }
         try {
+            if ($result === null) {
+                if ($adminUserId === null) {
+                    return null;
+                }
+                $skill = $this->skills->byName($name, $adminUserId);
+
+                return $skill !== null && $this->offered($subject, $skill, $adminUserId) ? $skill : null;
+            }
             if ($result instanceof McpSkill) {
                 $server = $this->catalog->serverConfig($result->entry()->server);
 
                 return $server !== null && $this->catalog->connected($server, $adminUserId) ? $result : null;
             }
+            if (!isset($this->catalog->replacedSkills()[$name])) {
+                return $result;
+            }
             foreach ($this->skills->all($adminUserId) as $skill) {
-                $server = $this->catalog->serverConfig($skill->entry()->server);
-                if ($server !== null
-                    && $server->replacesSkill === $name
-                    && $this->catalog->connected($server, $adminUserId)
-                    && $subject->isCallAllowed($skill, [], $adminUserId)
-                    && $this->authorization->isAllowed($skill->getMagentoAcl())
+                if (($this->catalog->serverConfig($skill->entry()->server)?->replacesSkill ?? '') === $name
+                    && $this->offered($subject, $skill, $adminUserId)
                 ) {
                     return null;
                 }
@@ -156,6 +157,20 @@ class ToolRegistryMcpSkills
 
             return $result;
         }
+    }
+
+    /**
+     * Whether this admin is offered this skill: its server is enabled and, for OAuth, connected by them;
+     * Mago's own permission check allows it; and the role holds the skill's ACL resource.
+     */
+    private function offered(ToolRegistry $subject, McpSkill $skill, ?int $adminUserId): bool
+    {
+        $server = $this->catalog->serverConfig($skill->entry()->server);
+
+        return $server !== null
+            && $this->catalog->connected($server, $adminUserId)
+            && $subject->isCallAllowed($skill, [], $adminUserId)
+            && $this->authorization->isAllowed($skill->getMagentoAcl());
     }
 
     /**

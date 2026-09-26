@@ -72,10 +72,32 @@ final class OAuthAuthenticatorTest extends TestCase
     {
         $this->tokens->save(1, 'remote', ['access_token' => 'old', 'refresh_token' => 'rt', 'expires_in' => 3600]);
         $oauth = $this->createStub(OAuthClient::class);
-        $oauth->method('refresh')->willThrowException(new OAuthException('invalid_grant'));
+        $oauth->method('refresh')->willThrowException(new OAuthException('The authorization server answered HTTP 400: invalid_grant.', 400));
 
         self::assertFalse($this->authenticator($oauth)->onUnauthorized(1));
         self::assertNull($this->tokens->find(1, 'remote'));
+    }
+
+    #[Test]
+    public function aServerErrorDuringRefreshKeepsTheConnection(): void
+    {
+        $this->tokens->save(1, 'remote', ['access_token' => 'old', 'refresh_token' => 'rt', 'expires_in' => 3600]);
+        $oauth = $this->createStub(OAuthClient::class);
+        $oauth->method('refresh')->willThrowException(new OAuthException('The authorization server answered HTTP 503.', 503));
+
+        self::assertFalse($this->authenticator($oauth)->onUnauthorized(1), 'no new token this time');
+        self::assertNotNull($this->tokens->find(1, 'remote'), 'a temporary failure does not disconnect the admin');
+    }
+
+    #[Test]
+    public function aTransportErrorDuringRefreshKeepsTheConnection(): void
+    {
+        $this->tokens->save(1, 'remote', ['access_token' => 'old', 'refresh_token' => 'rt', 'expires_in' => 3600]);
+        $oauth = $this->createStub(OAuthClient::class);
+        $oauth->method('refresh')->willThrowException(new OAuthException('The authorization server is unreachable: timeout'));
+
+        self::assertFalse($this->authenticator($oauth)->onUnauthorized(1));
+        self::assertNotNull($this->tokens->find(1, 'remote'));
     }
 
     #[Test]

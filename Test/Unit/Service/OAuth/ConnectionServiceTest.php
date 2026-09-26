@@ -128,8 +128,16 @@ final class ConnectionServiceTest extends TestCase
         $state = $this->startedState(1);
         $this->oauth->expects(self::never())->method('exchangeCode');
 
+        try {
+            $this->service->complete($state, 'code-1', 2);
+            self::fail('a callback for another admin must be rejected');
+        } catch (OAuthException) {
+            // expected
+        }
+
+        self::assertArrayNotHasKey($state, $this->pending->pending, 'the state is consumed, so its owner cannot replay it either');
         $this->expectException(OAuthException::class);
-        $this->service->complete($state, 'code-1', 2);
+        $this->service->complete($state, 'code-1', 1);
     }
 
     #[Test]

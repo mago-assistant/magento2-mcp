@@ -59,7 +59,9 @@ class OAuthAuthenticator implements AuthenticatorInterface
     }
 
     /**
-     * A failed refresh disconnects the user, so they are asked to connect again instead of getting 401s.
+     * A refresh the authorization server rejects (a 4xx such as invalid_grant) disconnects the user, so they
+     * are asked to connect again instead of getting 401s. An outage (5xx, unreachable) keeps the connection:
+     * this attempt sends no token, the next one tries again.
      *
      * @return array{access_token: string}|null
      */
@@ -73,8 +75,10 @@ class OAuthAuthenticator implements AuthenticatorInterface
 
         try {
             $token = $this->oauthClient->refresh($client['metadata'], $client, $refreshToken);
-        } catch (OAuthException) {
-            $this->tokenRepository->delete($userId, $this->serverCode);
+        } catch (OAuthException $e) {
+            if ($e->getCode() >= 400 && $e->getCode() < 500) {
+                $this->tokenRepository->delete($userId, $this->serverCode);
+            }
             return null;
         }
         $this->tokenRepository->save($userId, $this->serverCode, $token);

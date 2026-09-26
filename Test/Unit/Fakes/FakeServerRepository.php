@@ -14,6 +14,8 @@ final class FakeServerRepository implements ServerRepositoryInterface
 {
     /** @var array<string,array<string,mixed>> */
     public array $rows = [];
+    /** Number of getByName() calls, to prove hot paths do not query per skill. */
+    public int $byNameCalls = 0;
 
     /**
      * @param array<string,mixed> $extra columns to override, e.g. ['output_public' => true, 'label' => 'Demo']
@@ -39,6 +41,7 @@ final class FakeServerRepository implements ServerRepositoryInterface
 
     public function getByName(string $name): ?array
     {
+        $this->byNameCalls++;
         return $this->rows[DiscoveredServer::normaliseName($name)] ?? null;
     }
 

@@ -107,8 +107,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
             $skills,
             $this->errorLogger(),
             $authorization ?? new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write']),
-            $this->catalog,
-            $this->authenticators
+            $this->catalog
         );
     }
 
@@ -319,5 +318,41 @@ final class ToolRegistryMcpSkillsTest extends TestCase
             'MCP skills unavailable: {"error":"down","exception":"RuntimeException"}',
             $this->log->messages()
         );
+    }
+
+    #[Test]
+    public function aConnectedAdminCanRunAnOauthSkillWhenNothingIsCachedYet(): void
+    {
+        // The confirm round-trip of a write: a fresh request, an empty cache, getTool() before any listing.
+        $this->addOauthServer();
+        $this->authenticators->credentials['remote:7'] = true;
+        $plugin = $this->plugin();
+        $registry = new PluggedToolRegistry(null, [$this->magoTool], $plugin);
+
+        self::assertSame([], $this->cache->store, 'nothing cached yet');
+        self::assertInstanceOf(McpSkill::class, $registry->getTool('mcp_remote__metrics_get', 7));
+        self::assertNull($registry->getTool('mcp_remote__metrics_get', 8), 'an admin without a connection still cannot');
+        self::assertNull($registry->getTool('mcp_remote__no_such_tool', 7));
+    }
+
+    #[Test]
+    public function hotPathsDoNotQueryPerSkill(): void
+    {
+        $this->addOauthServer();
+        $this->authenticators->credentials['remote:7'] = true;
+        $plugin = $this->plugin();
+        $registry = new PluggedToolRegistry(null, [$this->magoTool], $plugin);
+        $plugin->afterGetEnabledTools($registry, [], 7);
+        $this->servers->byNameCalls = 0;
+        $this->authenticators->checks = 0;
+
+        $plugin->afterGetEnabledTools($registry, [], 7);
+        $plugin->afterGetEnabledTools($registry, [], 7);
+        foreach (['mcp_demo__product_list', 'mcp_remote__metrics_get', 'sales_data'] as $name) {
+            $plugin->afterGetTool($registry, $registry->getToolByName($name), $name, 7);
+        }
+
+        self::assertSame(0, $this->servers->byNameCalls, 'server rows come from the per-request list, not a query per skill');
+        self::assertSame(0, $this->authenticators->checks, 'one credential check per server per admin per request, already made');
     }
 }

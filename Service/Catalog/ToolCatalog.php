@@ -43,6 +43,12 @@ class ToolCatalog
     /** @var array<string,CatalogEntry[]> built entries keyed like $memo, once per request */
     private array $entriesMemo = [];
 
+    /** @var array<string,ServerConfig>|null enabled servers by name, built from the enabled rows once per request */
+    private ?array $configsMemo = null;
+
+    /** @var array<string,bool> "<name>:<admin id>" => holds credentials, once per request */
+    private array $connectedMemo = [];
+
     private readonly AuthenticatorResolver $authenticators;
 
     public function __construct(
@@ -88,13 +94,42 @@ class ToolCatalog
         return $row === null ? [] : $this->buildEntries($row, $adminUserId);
     }
 
+    /**
+     * The enabled server of that name, from the enabled rows read once per request: this sits on the path
+     * of every admin page load and every tool call, so it never queries per call.
+     */
     public function serverConfig(string $name): ?ServerConfig
     {
-        $row = $this->servers->getByName($name);
+        if ($this->configsMemo === null) {
+            $this->configsMemo = [];
+            foreach ($this->enabledRows() as $row) {
+                $this->configsMemo[(string)$row['name']] = ServerConfig::fromRow(
+                    $row,
+                    $this->config->getProcessTimeout(),
+                    $this->definitionFor($row)
+                );
+            }
+        }
 
-        return $row !== null && $row['enabled']
-            ? ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitionFor($row))
-            : null;
+        return $this->configsMemo[DiscoveredServer::normaliseName($name)] ?? null;
+    }
+
+    /**
+     * Names of Mago skills some enabled server replaces, so a lookup of any other skill can skip the check.
+     *
+     * @return array<string,true>
+     */
+    public function replacedSkills(): array
+    {
+        $names = [];
+        foreach ($this->enabledRows() as $row) {
+            $replaces = (string)($row['replaces_skill'] ?? '');
+            if ($replaces !== '') {
+                $names[$replaces] = true;
+            }
+        }
+
+        return $names;
     }
 
     /**
@@ -118,6 +153,8 @@ class ToolCatalog
         $this->memo = null;
         $this->rowsMemo = null;
         $this->entriesMemo = [];
+        $this->configsMemo = null;
+        $this->connectedMemo = [];
         if ($name === null) {
             $this->cache->clean(\Zend_Cache::CLEANING_MODE_MATCHING_TAG, [McpTools::CACHE_TAG]);
 
@@ -355,11 +392,16 @@ class ToolCatalog
         if ($adminUserId === null) {
             return false;
         }
-        try {
-            return $this->authenticators->for($server)->hasCredentials($adminUserId);
-        } catch (\Throwable) {
-            return false;
+        $key = $server->name . ':' . $adminUserId;
+        if (!isset($this->connectedMemo[$key])) {
+            try {
+                $this->connectedMemo[$key] = $this->authenticators->for($server)->hasCredentials($adminUserId);
+            } catch (\Throwable) {
+                $this->connectedMemo[$key] = false;
+            }
         }
+
+        return $this->connectedMemo[$key];
     }
 
     /**
