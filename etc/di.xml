@@ -53,9 +53,19 @@
         </arguments>
     </type>
 
+    <!--
+        Optional constructor parameters are NOT auto-injected by Magento's object manager (the default
+        value wins), so the two that matter at runtime are wired here explicitly.
+    -->
     <type name="MagoAssistant\Mcp\Service\Catalog\ToolCatalog">
         <arguments>
             <argument name="cache" xsi:type="object">MagoAssistant\Mcp\Model\Cache\Type\McpTools</argument>
+            <argument name="authenticators" xsi:type="object">MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver</argument>
+        </arguments>
+    </type>
+    <type name="MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver">
+        <arguments>
+            <argument name="oauthFactory" xsi:type="object">MagoAssistant\Mcp\Service\OAuth\OAuthAuthenticatorFactory</argument>
         </arguments>
     </type>
 
