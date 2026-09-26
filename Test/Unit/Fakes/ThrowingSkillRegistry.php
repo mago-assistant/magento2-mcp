@@ -17,7 +17,7 @@ final class ThrowingSkillRegistry extends SkillRegistry
     {
     }
 
-    public function all(): array
+    public function all(?int $adminUserId = null): array
     {
         throw new \RuntimeException('down');
     }

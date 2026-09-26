@@ -17,6 +17,7 @@ use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
 use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Service\Tool\Mcp\McpSkill;
 use MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeAuthenticatorResolver;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
@@ -31,12 +32,14 @@ final class SkillRegistryTest extends TestCase
     private FakeServerRepository $servers;
     private FakeTransport $transport;
     private FakeLogger $log;
+    private FakeAuthenticatorResolver $authenticators;
 
     protected function setUp(): void
     {
         $this->servers = new FakeServerRepository();
         $this->transport = new FakeTransport();
         $this->log = new FakeLogger();
+        $this->authenticators = new FakeAuthenticatorResolver();
         $this->transport->tools['demo'] = [
             ['name' => 'product-list', 'description' => 'List products.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'product-delete', 'description' => 'Delete a product.', 'inputSchema' => ['type' => 'object']],
@@ -61,12 +64,13 @@ final class SkillRegistryTest extends TestCase
         $errorLogger = new ErrorLogger($this->log, $json);
         $catalog = new ToolCatalog(
             $this->servers,
-            new TransportResolver(['stdio' => $this->transport]),
+            new TransportResolver(['stdio' => $this->transport, 'http' => $this->transport]),
             new FakeCache(),
             $config,
             new ModeClassifier(),
             $errorLogger,
-            new DefinitionRegistry()
+            new DefinitionRegistry(),
+            $this->authenticators
         );
         $executor = new Executor(
             $catalog,
@@ -207,5 +211,21 @@ final class SkillRegistryTest extends TestCase
             'the second skill of the same server in one request skips the server block'
         );
         self::assertStringContainsString('## mcp_demo__product_delete', $second->getInstructions(), 'its own block still goes');
+    }
+
+    #[Test]
+    public function memoisesPerAdminId(): void
+    {
+        $this->transport->tools['remote'] = [
+            ['name' => 'metrics-get', 'description' => '', 'inputSchema' => ['type' => 'object']],
+        ];
+        $this->servers->add('remote', true, 'module', ['transport' => 'http', 'auth_type' => 'oauth', 'command' => []]);
+        $this->authenticators->credentials['remote:7'] = true;
+        $registry = $this->registry();
+
+        self::assertNotContains('mcp_remote__metrics_get', self::names($registry->all()), 'no admin: not fetched');
+        self::assertContains('mcp_remote__metrics_get', self::names($registry->all(7)), 'the connected admin: fetched');
+        self::assertNotNull($registry->byName('mcp_remote__metrics_get', 7));
+        self::assertNull($registry->byName('mcp_remote__metrics_get'), 'the null memo from before this request\'s fetch stands');
     }
 }

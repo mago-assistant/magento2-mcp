@@ -21,6 +21,7 @@ use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Service\Tool\Mcp\McpSkill;
 use MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeAuthorization;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeAuthenticatorResolver;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeMagoTool;
@@ -40,6 +41,9 @@ final class ToolRegistryMcpSkillsTest extends TestCase
     private FakeTransport $transport;
     private FakeLogger $log;
     private FakeMagoTool $magoTool;
+    private FakeAuthenticatorResolver $authenticators;
+    private ?ToolCatalog $catalog = null;
+    private FakeCache $cache;
 
     protected function setUp(): void
     {
@@ -47,6 +51,8 @@ final class ToolRegistryMcpSkillsTest extends TestCase
         $this->transport = new FakeTransport();
         $this->log = new FakeLogger();
         $this->magoTool = new FakeMagoTool();
+        $this->authenticators = new FakeAuthenticatorResolver();
+        $this->cache = new FakeCache();
         $this->transport->tools['demo'] = [
             ['name' => 'product-list', 'description' => 'List products.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'product-delete', 'description' => 'Delete a product.', 'inputSchema' => ['type' => 'object']],
@@ -68,14 +74,15 @@ final class ToolRegistryMcpSkillsTest extends TestCase
             'mago/mcp/cache_lifetime' => '60',
             'mago/mcp/max_result_chars' => '16000',
         ]));
-        $catalog = new ToolCatalog(
+        $catalog = $this->catalog = new ToolCatalog(
             $this->servers,
-            new TransportResolver(['stdio' => $this->transport]),
-            new FakeCache(),
+            new TransportResolver(['stdio' => $this->transport, 'http' => $this->transport]),
+            $this->cache,
             $config,
             new ModeClassifier(),
             $this->errorLogger(),
-            new DefinitionRegistry()
+            new DefinitionRegistry(),
+            $this->authenticators
         );
         $executor = new Executor(
             $catalog,
@@ -91,11 +98,68 @@ final class ToolRegistryMcpSkillsTest extends TestCase
 
     private function plugin(?SkillRegistry $skills = null, ?FakeAuthorization $authorization = null): ToolRegistryMcpSkills
     {
+        if ($skills === null || $this->catalog === null) {
+            $real = $this->skillRegistry();
+            $skills ??= $real;
+        }
+
         return new ToolRegistryMcpSkills(
-            $skills ?? $this->skillRegistry(),
+            $skills,
             $this->errorLogger(),
-            $authorization ?? new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write'])
+            $authorization ?? new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write']),
+            $this->catalog,
+            $this->authenticators
         );
+    }
+
+    private function addOauthServer(string $replacesSkill = ''): void
+    {
+        $this->transport->tools['remote'] = [
+            ['name' => 'metrics-get', 'description' => 'Get metrics.', 'inputSchema' => ['type' => 'object']],
+        ];
+        $this->servers->add('remote', true, 'module', [
+            'transport' => 'http', 'auth_type' => 'oauth', 'command' => [], 'replaces_skill' => $replacesSkill,
+        ]);
+    }
+
+    #[Test]
+    public function anOauthServersToolsReachOnlyAConnectedAdmin(): void
+    {
+        $this->addOauthServer();
+        $this->authenticators->credentials['remote:7'] = true;
+        $plugin = $this->plugin();
+        $registry = new PluggedToolRegistry(null, [$this->magoTool], $plugin);
+
+        $forSeven = self::names($plugin->afterGetEnabledTools($registry, [], 7));
+        $forEight = self::names($plugin->afterGetEnabledTools($registry, [], 8));
+        $all = self::names($plugin->afterGetAllTools($registry, []));
+
+        self::assertContains('mcp_remote__metrics_get', $forSeven);
+        self::assertContains('mcp_demo__product_list', $forSeven);
+        self::assertNotContains('mcp_remote__metrics_get', $forEight, 'no connection, not offered');
+        self::assertContains('mcp_demo__product_list', $forEight, 'the stdio server needs no connection');
+        self::assertContains('mcp_remote__metrics_get', $all, 'the cached list is visible on Skills & Permissions');
+        self::assertNull($plugin->afterGetTool($registry, $registry->getToolByName('mcp_remote__metrics_get'), 'mcp_remote__metrics_get', 8), 'and blocked at execution for an unconnected admin');
+        self::assertNotNull($plugin->afterGetTool($registry, $registry->getToolByName('mcp_remote__metrics_get'), 'mcp_remote__metrics_get', 7));
+    }
+
+    #[Test]
+    public function aReplacedSkillIsHiddenAndBlockedForTheConnectedAdminOnly(): void
+    {
+        $this->addOauthServer('legacy');
+        $this->authenticators->credentials['remote:7'] = true;
+        $legacy = new FakeMagoTool('legacy');
+        $plugin = $this->plugin();
+        $registry = new PluggedToolRegistry(null, [$legacy], $plugin);
+
+        $forSeven = $plugin->afterGetEnabledTools($registry, ['legacy' => $legacy], 7);
+        $forEight = $plugin->afterGetEnabledTools($registry, ['legacy' => $legacy], 8);
+
+        self::assertArrayNotHasKey('legacy', $forSeven, 'the server replaces the skill for the admin it is offered to');
+        self::assertArrayHasKey('mcp_remote__metrics_get', $forSeven);
+        self::assertArrayHasKey('legacy', $forEight, 'everyone else keeps the skill');
+        self::assertNull($plugin->afterGetTool($registry, $legacy, 'legacy', 7), 'hidden and blocked, not only hidden');
+        self::assertSame($legacy, $plugin->afterGetTool($registry, $legacy, 'legacy', 8));
     }
 
     /**

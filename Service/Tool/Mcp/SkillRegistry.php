@@ -20,8 +20,8 @@ class SkillRegistry
 {
     private const NAME_PATTERN = '/^[A-Za-z0-9_-]{1,64}$/';
 
-    /** @var McpSkill[]|null keyed by skill name, once per request */
-    private ?array $skills = null;
+    /** @var array<string,McpSkill[]> skills keyed by name, per admin id ("" for none), once per request */
+    private array $skills = [];
 
     public function __construct(
         private readonly ToolCatalog $catalog,
@@ -34,13 +34,14 @@ class SkillRegistry
     /**
      * @return McpSkill[]
      */
-    public function all(): array
+    public function all(?int $adminUserId = null): array
     {
-        if ($this->skills === null) {
-            $instructions = $this->catalog->serverInstructions();
+        $key = (string)($adminUserId ?? '');
+        if (!isset($this->skills[$key])) {
+            $instructions = $this->catalog->serverInstructions($adminUserId);
             $gate = new InstructionGate();
             $skills = [];
-            foreach ($this->catalog->entries() as $entry) {
+            foreach ($this->catalog->entries($adminUserId) as $entry) {
                 $skill = new McpSkill(
                     $entry,
                     $this->executor,
@@ -67,21 +68,21 @@ class SkillRegistry
                 }
                 $skills[$name] = $skill;
             }
-            $this->skills = $skills;
+            $this->skills[$key] = $skills;
         }
 
-        return array_values($this->skills);
+        return array_values($this->skills[$key]);
     }
 
-    public function byName(string $name): ?McpSkill
+    public function byName(string $name, ?int $adminUserId = null): ?McpSkill
     {
-        $this->all();
+        $this->all($adminUserId);
 
-        return $this->skills[$name] ?? null;
+        return $this->skills[(string)($adminUserId ?? '')][$name] ?? null;
     }
 
-    public function isMcpSkill(string $name): bool
+    public function isMcpSkill(string $name, ?int $adminUserId = null): bool
     {
-        return $this->byName($name) !== null;
+        return $this->byName($name, $adminUserId) !== null;
     }
 }

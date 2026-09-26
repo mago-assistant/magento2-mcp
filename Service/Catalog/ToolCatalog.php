@@ -11,6 +11,7 @@ use MagoAssistant\Mago\Logger\ErrorLogger;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Model\Cache\Type\McpTools;
 use MagoAssistant\Mcp\Model\Config;
+use MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver;
 use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
 use MagoAssistant\Mcp\Service\Mcp\McpAuthenticationException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
@@ -26,14 +27,21 @@ class ToolCatalog
     private const CACHE_PREFIX = 'mago_mcp_tools_';
     private const FAILURE_LIFETIME = 300;
 
-    /** @var array<string,array{tools: array<int,array<string,mixed>>, instructions: string}>|null per-request memo */
+    /**
+     * Per-request memo of fetched lists, keyed "<server>:<admin id or empty>": an OAuth server answers
+     * nothing to an unconnected admin, and that answer must not stand in for a connected admin's fetch.
+     *
+     * @var array<string,array{tools: array<int,array<string,mixed>>, instructions: string}>|null
+     */
     private ?array $memo = null;
 
     /** @var array<int,array<string,mixed>>|null enabled rows, read once per request */
     private ?array $rowsMemo = null;
 
-    /** @var array<string,CatalogEntry[]> built entries per server name, once per request */
+    /** @var array<string,CatalogEntry[]> built entries keyed like $memo, once per request */
     private array $entriesMemo = [];
+
+    private readonly AuthenticatorResolver $authenticators;
 
     public function __construct(
         private readonly ServerRepositoryInterface $servers,
@@ -42,20 +50,23 @@ class ToolCatalog
         private readonly Config $config,
         private readonly ModeClassifier $classifier,
         private readonly ErrorLogger $errorLogger,
-        private readonly DefinitionRegistry $definitions
+        private readonly DefinitionRegistry $definitions,
+        ?AuthenticatorResolver $authenticators = null
     ) {
+        $this->authenticators = $authenticators ?? new AuthenticatorResolver();
     }
 
     /**
-     * Every tool of every enabled server.
+     * Every tool of every enabled server. The admin id decides whether an OAuth server may be contacted:
+     * null (CLI, cron, the Skills page) serves only what is cached.
      *
      * @return CatalogEntry[]
      */
-    public function entries(): array
+    public function entries(?int $adminUserId = null): array
     {
         $entries = [];
         foreach ($this->enabledRows() as $row) {
-            foreach ($this->buildEntries($row) as $entry) {
+            foreach ($this->buildEntries($row, $adminUserId) as $entry) {
                 $entries[] = $entry;
             }
         }
@@ -68,11 +79,11 @@ class ToolCatalog
      *
      * @return CatalogEntry[]
      */
-    public function entriesForServer(string $name): array
+    public function entriesForServer(string $name, ?int $adminUserId = null): array
     {
         $row = $this->servers->getByName($name);
 
-        return $row === null ? [] : $this->buildEntries($row);
+        return $row === null ? [] : $this->buildEntries($row, $adminUserId);
     }
 
     public function serverConfig(string $name): ?ServerConfig
@@ -87,11 +98,11 @@ class ToolCatalog
     /**
      * @return array<string,string> enabled server name => instructions its initialize result carried
      */
-    public function serverInstructions(): array
+    public function serverInstructions(?int $adminUserId = null): array
     {
         $instructions = [];
         foreach ($this->enabledRows() as $row) {
-            $text = $this->fetched($row)['instructions'];
+            $text = $this->fetched($row, $adminUserId)['instructions'];
             if ($text !== '') {
                 $instructions[(string)$row['name']] = $text;
             }
@@ -129,17 +140,18 @@ class ToolCatalog
      * @param array<string,mixed> $row
      * @return CatalogEntry[]
      */
-    private function buildEntries(array $row): array
+    private function buildEntries(array $row, ?int $adminUserId): array
     {
         $name = (string)$row['name'];
-        if (isset($this->entriesMemo[$name])) {
-            return $this->entriesMemo[$name];
+        $key = $this->memoKey($name, $adminUserId);
+        if (isset($this->entriesMemo[$key])) {
+            return $this->entriesMemo[$key];
         }
         $entries = [];
         $definition = $this->definitions->get($name);
         // A token-cost filter, not a permission: a name not on the list is not a skill at all.
         $allowed = array_map('strval', is_array($row['allowed_tools'] ?? null) ? $row['allowed_tools'] : []);
-        foreach ($this->fetched($row)['tools'] as $tool) {
+        foreach ($this->fetched($row, $adminUserId)['tools'] as $tool) {
             $toolName = (string)$tool['name'];
             if ($allowed !== [] && !in_array($toolName, $allowed, true)) {
                 continue;
@@ -164,7 +176,7 @@ class ToolCatalog
             );
         }
 
-        return $this->entriesMemo[$name] = $entries;
+        return $this->entriesMemo[$key] = $entries;
     }
 
     /**
@@ -264,11 +276,12 @@ class ToolCatalog
      * @param array<string,mixed> $row
      * @return array{tools: array<int,array<string,mixed>>, instructions: string}
      */
-    private function fetched(array $row): array
+    private function fetched(array $row, ?int $adminUserId): array
     {
         $name = (string)$row['name'];
-        if (isset($this->memo[$name])) {
-            return $this->memo[$name];
+        $key = $this->memoKey($name, $adminUserId);
+        if (isset($this->memo[$key])) {
+            return $this->memo[$key];
         }
         $cached = $this->cache->load($this->cacheId($name));
         if (is_string($cached) && $cached !== '') {
@@ -276,25 +289,30 @@ class ToolCatalog
             if (is_array($decoded) && array_key_exists('error', $decoded)) {
                 // A recent failure: the chat panel lists tools on every admin page load, so a down server
                 // costs one attempt per five minutes, never one per page.
-                return $this->memo[$name] = ['tools' => [], 'instructions' => ''];
+                return $this->memo[$key] = ['tools' => [], 'instructions' => ''];
             }
             if (is_array($decoded) && isset($decoded['tools'])) {
-                return $this->memo[$name] = [
+                return $this->memo[$key] = [
                     'tools' => $decoded['tools'],
                     'instructions' => (string)($decoded['instructions'] ?? ''),
                 ];
             }
         }
+        $server = ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitions->get($name));
+        if ($server->authType === ServerConfig::AUTH_OAUTH && !$this->connected($server, $adminUserId)) {
+            // Per-admin credentials: only a connected admin may trigger the fetch; the list then serves
+            // everyone from the cache. No request, no cache entry, no last_error.
+            return $this->memo[$key] = ['tools' => [], 'instructions' => ''];
+        }
         try {
-            $server = ServerConfig::fromRow($row, $this->config->getProcessTimeout(), $this->definitions->get($name));
-            $result = $this->transports->for($server)->listTools($server);
+            $result = $this->transports->for($server)->listTools($server, $adminUserId);
         } catch (\Throwable $e) {
             // Any failure, including one a transport forgot to wrap, is this server's alone.
             $this->errorLogger->addLog('MCP tools/list', ['server' => $name, 'error' => $e->getMessage()]);
             if ($e instanceof McpAuthenticationException && $server->authType === ServerConfig::AUTH_OAUTH) {
                 // Per-admin credentials: not cached and not on the row, the next admin may be the
                 // connected one. A rejected static token is an ordinary failure, cached and shown.
-                return $this->memo[$name] = ['tools' => [], 'instructions' => ''];
+                return $this->memo[$key] = ['tools' => [], 'instructions' => ''];
             }
             $this->servers->setLastError($name, $e->getMessage());
             $this->cache->save(
@@ -304,7 +322,7 @@ class ToolCatalog
                 self::FAILURE_LIFETIME
             );
 
-            return $this->memo[$name] = ['tools' => [], 'instructions' => ''];
+            return $this->memo[$key] = ['tools' => [], 'instructions' => ''];
         }
         $fetched = ['tools' => $result['tools'], 'instructions' => $result['instructions']];
         $this->cache->save(
@@ -317,7 +335,30 @@ class ToolCatalog
             $this->servers->setLastError($name, null);
         }
 
-        return $this->memo[$name] = $fetched;
+        return $this->memo[$key] = $fetched;
+    }
+
+    /**
+     * Whether this admin holds credentials for an OAuth server; a resolver failure counts as no.
+     */
+    public function connected(ServerConfig $server, ?int $adminUserId): bool
+    {
+        if ($server->authType !== ServerConfig::AUTH_OAUTH) {
+            return true;
+        }
+        if ($adminUserId === null) {
+            return false;
+        }
+        try {
+            return $this->authenticators->for($server)->hasCredentials($adminUserId);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function memoKey(string $name, ?int $adminUserId): string
+    {
+        return $name . ':' . ($adminUserId ?? '');
     }
 
     /**

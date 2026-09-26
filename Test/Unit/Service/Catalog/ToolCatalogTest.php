@@ -14,6 +14,7 @@ use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
 use MagoAssistant\Mcp\Service\Discovery\ServerDefinition;
+use MagoAssistant\Mcp\Test\Unit\Fakes\FakeAuthenticatorResolver;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
@@ -32,10 +33,12 @@ final class ToolCatalogTest extends TestCase
     private FakeCache $cache;
     private FakeLogger $log;
     private DefinitionRegistry $definitions;
+    private FakeAuthenticatorResolver $authenticators;
 
     protected function setUp(): void
     {
         $this->definitions = new DefinitionRegistry();
+        $this->authenticators = new FakeAuthenticatorResolver();
         $this->servers = new FakeServerRepository();
         $this->transport = new FakeTransport();
         $this->cache = new FakeCache();
@@ -70,7 +73,8 @@ final class ToolCatalogTest extends TestCase
             $config,
             new ModeClassifier(),
             new ErrorLogger($this->log, new Json()),
-            $this->definitions
+            $this->definitions,
+            $this->authenticators
         );
     }
 
@@ -333,6 +337,31 @@ final class ToolCatalogTest extends TestCase
 
         self::assertNull($this->servers->rows['remote']['last_error'], 'the next admin may be the connected one');
         self::assertArrayNotHasKey('mago_mcp_tools_remote', $this->cache->store);
+    }
+
+    #[Test]
+    public function anOauthServerIsFetchedOnlyForAnAdminWithCredentials(): void
+    {
+        $this->servers->add('remote', true, 'module', ['transport' => 'http', 'auth_type' => 'oauth', 'command' => []]);
+        $http = new FakeTransport();
+        $http->tools['remote'] = [['name' => 'metrics-get', 'description' => '', 'inputSchema' => ['type' => 'object']]];
+        $catalog = $this->catalog(true, ['stdio' => $this->transport, 'http' => $http]);
+
+        self::assertSame([], $catalog->entries(), 'no admin, no request');
+        self::assertSame([], $catalog->entries(7), 'an admin without a connection, no request');
+        self::assertSame(0, $http->calls === [] ? $http->listCalls : -1);
+        self::assertArrayNotHasKey('mago_mcp_tools_remote', $this->cache->store);
+        self::assertNull($this->servers->rows['remote']['last_error']);
+
+        $this->authenticators->credentials['remote:7'] = true;
+        $catalog = $this->catalog(true, ['stdio' => $this->transport, 'http' => $http]);
+        self::assertCount(1, $catalog->entries(7), 'the connected admin triggers the fetch');
+        self::assertSame(1, $http->listCalls);
+        self::assertArrayHasKey('mago_mcp_tools_remote', $this->cache->store);
+
+        $catalog = $this->catalog(true, ['stdio' => $this->transport, 'http' => $http]);
+        self::assertCount(1, $catalog->entries(), 'the cached list serves everyone');
+        self::assertSame(1, $http->listCalls, 'from the cache, no second request');
     }
 
     #[Test]

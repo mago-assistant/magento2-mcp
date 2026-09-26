@@ -44,4 +44,9 @@ final class PluggedToolRegistry extends ToolRegistry
     {
         return $this->plugin->afterGetEnabledTools($this, parent::getEnabledTools($adminUserId), $adminUserId);
     }
+
+    public function getTool(string $name, ?int $adminUserId = null): ?ToolInterface
+    {
+        return $this->plugin->afterGetTool($this, parent::getTool($name, $adminUserId), $name, $adminUserId);
+    }
 }
