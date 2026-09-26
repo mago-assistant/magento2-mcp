@@ -82,7 +82,7 @@ class Executor
             'text_length' => mb_strlen(implode("\n\n", $texts)),
         ]);
         if ($isError) {
-            $error = $texts === [] ? 'The MCP tool reported an error.' : implode("\n", $texts);
+            $error = $texts === [] ? 'The MCP tool reported an error.' : $this->truncate(implode("\n", $texts));
 
             return ['error' => $this->withHint($server, $error)];
         }

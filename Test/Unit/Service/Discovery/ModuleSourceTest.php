@@ -70,4 +70,16 @@ final class ModuleSourceTest extends TestCase
 
         self::assertTrue($servers[0]->readOnly);
     }
+
+    #[Test]
+    public function aDefinitionWithACommandAndNoUrlIsStdioWithoutSayingSo(): void
+    {
+        $servers = (new ModuleSource(new DefinitionRegistry([
+            new ServerDefinition('local', command: ['php', 'bin/x']),
+            new ServerDefinition('remote', url: 'https://example.test/mcp'),
+        ])))->discover();
+
+        self::assertSame('stdio', $servers[0]->transport);
+        self::assertSame('http', $servers[1]->transport);
+    }
 }

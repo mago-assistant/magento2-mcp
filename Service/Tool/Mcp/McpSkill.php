@@ -165,7 +165,7 @@ class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingTo
         if (trim($this->serverInstructions) !== '' && $this->gate->claim($this->entry->server)) {
             $blocks[] = sprintf(
                 "## Server %s\n%s",
-                $this->entry->server,
+                $this->entry->label(),
                 mb_substr(trim($this->serverInstructions), 0, self::SERVER_INSTRUCTIONS_LENGTH)
             );
         }
@@ -208,7 +208,7 @@ class McpSkill implements ToolInterface, IrreversibleToolInterface, ValidatingTo
     public function getImpacts(array $input, int $adminUserId): array
     {
         return [
-            sprintf('Runs %s tool "%s" with the given arguments', $this->entry->server, $this->entry->tool),
+            sprintf('Runs %s tool "%s" with the given arguments', $this->entry->label(), $this->entry->tool),
             'The assistant cannot undo this',
         ];
     }

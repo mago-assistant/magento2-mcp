@@ -11,7 +11,6 @@ use MagoAssistant\Mcp\Service\Auth\AuthenticatorResolver;
 use MagoAssistant\Mcp\Service\Mcp\McpAuthenticationException;
 use MagoAssistant\Mcp\Service\Mcp\McpException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
-use Symfony\Contracts\HttpClient\Exception\ExceptionInterface as HttpExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /**
@@ -147,8 +146,13 @@ class HttpTransport implements TransportInterface
         }
         if ($response['status'] === 401) {
             throw new McpAuthenticationException(sprintf(
-                'MCP server "%s" rejected the credentials (401). Connect or reconnect it on its MCP Servers page.',
-                $server->label()
+                'MCP server "%s" rejected the credentials (401).%s',
+                $server->label(),
+                match ($server->authType) {
+                    ServerConfig::AUTH_OAUTH => ' Connect or reconnect your account on the MCP Servers page.',
+                    ServerConfig::AUTH_BEARER => ' Check its bearer token.',
+                    default => ' It requires authentication this row does not have.',
+                }
             ));
         }
 
@@ -184,9 +188,9 @@ class HttpTransport implements TransportInterface
             $status = $response->getStatusCode();
             $responseHeaders = $response->getHeaders(false);
             $content = $response->getContent(false);
-        } catch (HttpExceptionInterface | \Throwable $e) {
+        } catch (\Throwable $e) {
             throw new McpException(
-                sprintf('MCP server "%s" is unreachable: %s', $server->label(), $e->getMessage()),
+                sprintf('MCP server "%s" request failed: %s', $server->label(), $e->getMessage()),
                 0,
                 $e
             );

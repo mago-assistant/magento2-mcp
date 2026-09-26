@@ -15,6 +15,7 @@ use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Discovery\DefinitionRegistry;
 use MagoAssistant\Mcp\Service\Chat\ToolEventRelabeler;
+use MagoAssistant\Mcp\Service\Tool\Mcp\McpSkill;
 use MagoAssistant\Mcp\Service\Tool\Mcp\Executor;
 use MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeCache;
@@ -39,7 +40,10 @@ final class ToolEventRelabelerTest extends TestCase
         };
     }
 
-    private function registry(): SkillRegistry
+    /**
+     * @param array<int,array<string,mixed>> $extraTools
+     */
+    private function registry(array $extraTools = []): SkillRegistry
     {
         $servers = new FakeServerRepository();
         $transport = new FakeTransport();
@@ -47,6 +51,7 @@ final class ToolEventRelabelerTest extends TestCase
         $transport->tools['demo'] = [
             ['name' => 'product-list', 'description' => 'List products.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'code-runner', 'description' => 'Run PHP.', 'inputSchema' => ['type' => 'object']],
+            ...$extraTools,
         ];
         $servers->add('demo', true);
         $config = new Config(new FakeScopeConfig([
@@ -170,5 +175,21 @@ final class ToolEventRelabelerTest extends TestCase
             ],
             $this->emitted
         );
+    }
+
+    #[Test]
+    public function aHashedSkillNameStillGetsThePhraseOfItsRealToolName(): void
+    {
+        $tool = 'list-' . str_repeat('x', 70);
+        $name = McpSkill::nameFor('demo', $tool);
+        $wrapped = (new ToolEventRelabeler(
+            $this->registry([['name' => $tool, 'description' => '', 'inputSchema' => ['type' => 'object']]])
+        ))->wrap($this->recorder());
+
+        $wrapped('tool_status', ['name' => $name, 'status' => 'running', 'message' => 'Running ' . $name . '...']);
+
+        $message = $this->emitted[0][1]['message'];
+        self::assertStringContainsString(str_repeat('x', 70), $message, 'from the tool, not from the cut skill name');
+        self::assertDoesNotMatchRegularExpression('/[0-9a-f]{8}\.\.\.$/', $message, 'no hash in the phrase');
     }
 }

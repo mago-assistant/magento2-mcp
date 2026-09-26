@@ -385,4 +385,13 @@ final class McpSkillTest extends TestCase
             self::assertSame([PiiClass::PUBLIC], $classes);
         }
     }
+
+    #[Test]
+    public function impactsAndInstructionsUseTheServersLabel(): void
+    {
+        $this->servers->rows['demo']['label'] = 'Demo Shop';
+
+        self::assertStringContainsString('Runs Demo Shop tool "product-delete"', $this->skill('product-delete')->getImpacts([], 1)[0]);
+        self::assertStringContainsString("## Server Demo Shop\n", $this->skill('product-list', 'Be brief.')->getInstructions());
+    }
 }

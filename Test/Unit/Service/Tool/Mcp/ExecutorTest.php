@@ -217,9 +217,22 @@ final class ExecutorTest extends TestCase
     public function aPublicServersScalarJsonTextStaysText(): void
     {
         $this->servers->add('demo', true, 'composer', ['output_public' => true]);
-        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => '42']], 'isError' => false];
+        foreach (['42', 'true', '"text"', 'null'] as $scalarJson) {
+            $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => $scalarJson]], 'isError' => false];
 
-        self::assertSame('42', $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3])['result']);
+            self::assertSame($scalarJson, $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3])['result']);
+        }
+    }
+
+    #[Test]
+    public function longErrorTextIsTruncatedBeforeTheHint(): void
+    {
+        $this->servers->add('demo', true);
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => str_repeat('e', 20000)]], 'isError' => true];
+
+        $error = $this->executor()->run($this->entry(), ['sku' => 'A', 'qty' => 3])['error'];
+
+        self::assertStringStartsWith(str_repeat('e', 16000) . ' [truncated: 4000 more characters]', $error);
     }
 
     #[Test]

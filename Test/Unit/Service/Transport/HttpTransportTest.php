@@ -178,7 +178,7 @@ final class HttpTransportTest extends TestCase
         $http = new MockHttpClient(static fn () => throw new TransportException('Connection refused'));
 
         $this->expectException(McpException::class);
-        $this->expectExceptionMessage('MCP server "Test Server" is unreachable: Connection refused');
+        $this->expectExceptionMessage('MCP server "Test Server" request failed: Connection refused');
         (new HttpTransport($http, $this->resolver))->listTools($this->server());
     }
 
@@ -262,5 +262,28 @@ final class HttpTransportTest extends TestCase
     private function json(array $message, array $headers = []): MockResponse
     {
         return new MockResponse(json_encode($message), ['response_headers' => ['content-type: application/json', ...$headers]]);
+    }
+
+    #[Test]
+    public function aRejectedBearerTokenSaysToCheckTheToken(): void
+    {
+        $client = $this->client([new MockResponse('', ['http_code' => 401])]);
+
+        try {
+            $client->listTools($this->server('bearer'));
+            self::fail('expected a 401');
+        } catch (McpException $e) {
+            self::assertStringContainsString('Check its bearer token.', $e->getMessage());
+            self::assertStringNotContainsString('Connect', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function anUnauthenticatedServerSaysItNeedsAuthentication(): void
+    {
+        $client = $this->client([new MockResponse('', ['http_code' => 401])]);
+
+        $this->expectExceptionMessage('It requires authentication this row does not have.');
+        $client->listTools($this->server('none'));
     }
 }

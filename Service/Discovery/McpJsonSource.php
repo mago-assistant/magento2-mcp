@@ -48,6 +48,13 @@ class McpJsonSource implements SourceInterface
             if (!is_array($entry) || $name === '') {
                 continue;
             }
+            if (isset($entry['url']) && !is_string($entry['url'])) {
+                $this->errorLogger->addLog(
+                    'MCP discovery',
+                    ['file' => '.mcp.json', 'server' => $name, 'skipped' => 'url is not a string']
+                );
+                continue;
+            }
             if (isset($entry['url'])) {
                 $http = $this->http($name, $entry);
                 if ($http !== null) {
@@ -93,7 +100,7 @@ class McpJsonSource implements SourceInterface
                 && is_string($value)
                 && preg_match('/^Bearer\s+(\S+)$/i', $value, $m)
             ) {
-                $token = $m[1];
+                $token = $this->expand($name, $m[1]);
                 continue;
             }
             $this->errorLogger->addLog(
@@ -113,5 +120,39 @@ class McpJsonSource implements SourceInterface
             authType: $token !== '' ? 'bearer' : 'none',
             bearerToken: $token
         );
+    }
+
+    /**
+     * "${VAR}" placeholders, the convention .mcp.json files use to keep secrets out of the file, are read
+     * from the environment. A placeholder that is not set yields no token at all, never the literal text,
+     * which would be rejected on every request; the variable's name, never a value, is logged.
+     */
+    private function expand(string $server, string $token): string
+    {
+        $missing = [];
+        $expanded = (string)preg_replace_callback(
+            '/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/',
+            static function (array $m) use (&$missing): string {
+                $value = getenv($m[1]);
+                if (!is_string($value) || $value === '') {
+                    $missing[] = $m[1];
+
+                    return '';
+                }
+
+                return $value;
+            },
+            $token
+        );
+        if ($missing !== []) {
+            $this->errorLogger->addLog(
+                'MCP discovery',
+                ['file' => '.mcp.json', 'server' => $server, 'unset_variables' => $missing, 'token' => 'ignored']
+            );
+
+            return '';
+        }
+
+        return $expanded;
     }
 }

@@ -124,4 +124,50 @@ final class McpJsonSourceTest extends TestCase
         self::assertCount(2, $this->log->entries);
         self::assertStringContainsString('.mcp.json', $this->log->messages());
     }
+
+    #[Test]
+    public function aPlaceholderTokenIsExpandedFromTheEnvironment(): void
+    {
+        putenv('MAGO_TEST_MCP_TOKEN=abc123');
+        try {
+            file_put_contents($this->root . '/.mcp.json', json_encode(['mcpServers' => [
+                'remote' => ['url' => 'https://example.test/mcp', 'headers' => ['Authorization' => 'Bearer ${MAGO_TEST_MCP_TOKEN}']],
+            ]]));
+
+            $servers = $this->source()->discover();
+        } finally {
+            putenv('MAGO_TEST_MCP_TOKEN');
+        }
+
+        self::assertSame('bearer', $servers[0]->authType);
+        self::assertSame('abc123', $servers[0]->bearerToken);
+    }
+
+    #[Test]
+    public function anUnresolvablePlaceholderTokenIsSkipped(): void
+    {
+        file_put_contents($this->root . '/.mcp.json', json_encode(['mcpServers' => [
+            'remote' => ['url' => 'https://example.test/mcp', 'headers' => ['Authorization' => 'Bearer ${MAGO_TEST_MCP_UNSET}']],
+        ]]));
+
+        $servers = $this->source()->discover();
+
+        self::assertSame('none', $servers[0]->authType, 'a literal placeholder would 401 on every page for five minutes');
+        self::assertSame('', $servers[0]->bearerToken);
+        self::assertStringContainsString('MAGO_TEST_MCP_UNSET', $this->log->messages());
+    }
+
+    #[Test]
+    public function aNonStringUrlSkipsTheEntryWithALogLine(): void
+    {
+        file_put_contents($this->root . '/.mcp.json', json_encode(['mcpServers' => [
+            'broken' => ['url' => ['not', 'a', 'string']],
+            'fine' => ['url' => 'https://example.test/mcp'],
+        ]]));
+
+        $servers = $this->source()->discover();
+
+        self::assertSame(['fine'], array_map(static fn ($s) => $s->name, $servers));
+        self::assertStringContainsString('broken', $this->log->messages());
+    }
 }

@@ -14,6 +14,9 @@ final class ServerDefinition
 {
     public readonly string $name;
 
+    /** "http", or "stdio" when not given and the definition has a command but no URL */
+    public readonly string $transport;
+
     /**
      * @param string[] $command
      * @param array<string,string> $env
@@ -24,7 +27,7 @@ final class ServerDefinition
     public function __construct(
         string $name,
         public readonly string $label = '',
-        public readonly string $transport = 'http',
+        string $transport = '',
         public readonly string $url = '',
         public readonly array $command = [],
         public readonly array $env = [],
@@ -40,6 +43,9 @@ final class ServerDefinition
         public readonly bool $readOnly = false
     ) {
         $this->name = DiscoveredServer::normaliseName($name);
+        $this->transport = $transport !== ''
+            ? $transport
+            : ($this->command !== [] && $this->url === '' ? 'stdio' : 'http');
     }
 
     public function toDiscoveredServer(): DiscoveredServer

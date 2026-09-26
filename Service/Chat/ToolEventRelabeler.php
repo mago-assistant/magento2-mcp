@@ -49,11 +49,9 @@ class ToolEventRelabeler
                 && str_starts_with($data['message'], 'Running ' . $name)
             ) {
                 try {
-                    $phrase = $this->skills->isMcpSkill($name)
-                        ? $this->phraseFor(
-                            substr($name, strpos($name, McpSkill::SEPARATOR) + strlen(McpSkill::SEPARATOR))
-                        )
-                        : null;
+                    // The skill's own tool name: the part after "__" is cut and hashed for long names.
+                    $tool = $this->skills->byName($name)?->entry()->tool;
+                    $phrase = $tool !== null ? $this->phraseFor($tool) : null;
                 } catch (\Throwable) {
                     $phrase = null;
                 }
