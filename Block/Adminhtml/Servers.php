@@ -8,11 +8,10 @@ namespace MagoAssistant\Mcp\Block\Adminhtml;
 
 use Magento\Backend\Block\Template;
 use Magento\Backend\Block\Template\Context;
-use Magento\Backend\Model\Auth\Session as AuthSession;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
+use MagoAssistant\Mcp\Service\Admin\ConnectionState;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
-use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
-use MagoAssistant\Mcp\Service\OAuth\ConnectionService;
+use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
 
 class Servers extends Template
 {
@@ -20,8 +19,7 @@ class Servers extends Template
         Context $context,
         private readonly ServerRepositoryInterface $servers,
         private readonly ToolCatalog $catalog,
-        private readonly ConnectionService $connections,
-        private readonly AuthSession $authSession,
+        private readonly ConnectionState $connectionState,
         array $data = []
     ) {
         parent::__construct($context, $data);
@@ -29,20 +27,17 @@ class Servers extends Template
 
     /**
      * Rows plus 'tools_total'. Tool lists are read first so a fresh last_error written by a failed
-     * fetch is in the rows that are returned.
+     * fetch is in the rows that are returned. Counted for the viewing admin, so an OAuth server they
+     * connected shows its tools at once.
      *
      * @return array<int,array<string,mixed>>
      */
     public function getServers(): array
     {
         $counts = [];
-        $adminUserId = (int)$this->authSession->getUser()?->getId();
+        $adminUserId = $this->connectionState->currentAdminId();
         foreach ($this->servers->getEnabled() as $row) {
-            // Counted for the viewing admin, so an OAuth server they connected shows its tools at once.
-            $counts[$row['name']] = count($this->catalog->entriesForServer(
-                $row['name'],
-                $adminUserId > 0 ? $adminUserId : null
-            ));
+            $counts[$row['name']] = count($this->catalog->entriesForServer($row['name'], $adminUserId));
         }
         $rows = [];
         foreach ($this->servers->getAll() as $row) {
@@ -51,6 +46,30 @@ class Servers extends Template
         }
 
         return $rows;
+    }
+
+    /**
+     * @param array<string,mixed> $row
+     */
+    public function isManual(array $row): bool
+    {
+        return ($row['source'] ?? '') === DiscoveredServer::SOURCE_MANUAL;
+    }
+
+    /**
+     * @param array<string,mixed> $row
+     */
+    public function hasConnection(array $row): bool
+    {
+        return $this->connectionState->hasConnection($row);
+    }
+
+    /**
+     * @param array<string,mixed> $row
+     */
+    public function isConnected(array $row): bool
+    {
+        return $this->connectionState->isConnected($row);
     }
 
     public function getToggleUrl(): string
@@ -68,28 +87,19 @@ class Servers extends Template
         return $this->getUrl('mago_mcp/servers/refresh');
     }
 
-    /**
-     * Whether this row is an enabled OAuth server, the only kind with a connection to show.
-     *
-     * @param array<string,mixed> $row
-     */
-    public function hasConnection(array $row): bool
+    public function getNewUrl(): string
     {
-        return (bool)$row['enabled']
-            && ($row['transport'] ?? '') === ServerConfig::TRANSPORT_HTTP
-            && ($row['auth_type'] ?? '') === ServerConfig::AUTH_OAUTH;
+        return $this->getUrl('mago_mcp/servers/new');
     }
 
-    /**
-     * @param array<string,mixed> $row
-     */
-    public function isConnected(array $row): bool
+    public function getEditUrl(string $name): string
     {
-        $userId = (int)$this->authSession->getUser()?->getId();
+        return $this->getUrl('mago_mcp/servers/edit', ['name' => $name]);
+    }
 
-        return $this->hasConnection($row)
-            && $userId > 0
-            && $this->connections->isConnected(ServerConfig::fromRow($row, 1), $userId);
+    public function getDeleteUrl(): string
+    {
+        return $this->getUrl('mago_mcp/servers/delete');
     }
 
     public function getConnectUrl(string $name): string

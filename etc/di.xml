@@ -83,11 +83,19 @@
         <plugin name="mago_mcp_tool_display" type="MagoAssistant\Mcp\Plugin\ChatServiceToolDisplay"/>
     </type>
 
-    <!-- The grid reads the logged-in admin only to show that admin's own connection state. -->
-    <type name="MagoAssistant\Mcp\Block\Adminhtml\Servers">
+    <!--
+        The grid and the edit page read the logged-in admin only to show that admin's own connection state;
+        the connection service is a proxy so no OAuth or HTTP client is built for pages without OAuth rows.
+    -->
+    <type name="MagoAssistant\Mcp\Service\Admin\ConnectionState">
         <arguments>
             <argument name="authSession" xsi:type="object">Magento\Backend\Model\Auth\Session\Proxy</argument>
             <argument name="connections" xsi:type="object">MagoAssistant\Mcp\Service\OAuth\ConnectionService\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="MagoAssistant\Mcp\Block\Adminhtml\ServerForm">
+        <arguments>
+            <argument name="backendSession" xsi:type="object">Magento\Backend\Model\Session\Proxy</argument>
         </arguments>
     </type>
 

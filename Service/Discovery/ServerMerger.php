@@ -12,6 +12,25 @@ namespace MagoAssistant\Mcp\Service\Discovery;
 class ServerMerger
 {
     /**
+     * The row a rescan writes for a known server: the source owns the connection details, the administrator
+     * owns enabled, read_only and output_public (the source's value counts only when the row is inserted),
+     * and the row keeps its last error.
+     *
+     * @param array<string,mixed> $existing
+     * @return array<string,mixed>
+     */
+    public static function updatedRow(DiscoveredServer $server, array $existing): array
+    {
+        return [
+            'enabled' => (bool)($existing['enabled'] ?? false),
+            'read_only' => (bool)($existing['read_only'] ?? false),
+            'output_public' => (bool)($existing['output_public'] ?? false),
+            'missing' => false,
+            'last_error' => $existing['last_error'] ?? null,
+        ] + $server->toRow();
+    }
+
+    /**
      * @param array<string,array<string,mixed>> $existingByName
      * @param DiscoveredServer[] $discovered
      * @return array{insert: DiscoveredServer[], update: DiscoveredServer[], missing: string[], skipped: string[]}

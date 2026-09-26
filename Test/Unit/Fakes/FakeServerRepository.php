@@ -48,7 +48,16 @@ final class FakeServerRepository implements ServerRepositoryInterface
     public function save(array $row): void
     {
         $name = DiscoveredServer::normaliseName((string)$row['name']);
+        // Like Repository::save(): an upsert that leaves the stored token alone when the key is absent.
+        if (!array_key_exists('bearer_token', $row) && isset($this->rows[$name]['bearer_token'])) {
+            $row['bearer_token'] = $this->rows[$name]['bearer_token'];
+        }
         $this->rows[$name] = ['name' => $name] + $row + ['server_id' => count($this->rows) + 1];
+    }
+
+    public function delete(string $name): void
+    {
+        unset($this->rows[DiscoveredServer::normaliseName($name)]);
     }
 
     public function setEnabled(string $name, bool $enabled): void

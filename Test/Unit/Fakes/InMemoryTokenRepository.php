@@ -37,4 +37,13 @@ final class InMemoryTokenRepository extends TokenRepository
     {
         unset($this->tokens[$adminUserId . ':' . $serverCode]);
     }
+
+    public function deleteForServer(string $serverCode): void
+    {
+        foreach (array_keys($this->tokens) as $key) {
+            if (str_ends_with($key, ':' . $serverCode)) {
+                unset($this->tokens[$key]);
+            }
+        }
+    }
 }

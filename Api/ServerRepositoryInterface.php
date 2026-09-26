@@ -31,6 +31,8 @@ interface ServerRepositoryInterface
      */
     public function save(array $row): void;
 
+    public function delete(string $name): void;
+
     public function setEnabled(string $name, bool $enabled): void;
 
     public function setLastError(string $name, ?string $error): void;

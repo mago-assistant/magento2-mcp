@@ -87,6 +87,14 @@ class Repository implements ServerRepositoryInterface
         $this->resourceConnection->getConnection()->insertOnDuplicate($this->table(), $data, $update);
     }
 
+    public function delete(string $name): void
+    {
+        $this->resourceConnection->getConnection()->delete(
+            $this->table(),
+            ['name = ?' => DiscoveredServer::normaliseName($name)]
+        );
+    }
+
     public function setEnabled(string $name, bool $enabled): void
     {
         $this->update($name, ['enabled' => (int)$enabled]);
@@ -110,12 +118,7 @@ class Repository implements ServerRepositoryInterface
             $names[] = $server->name;
         }
         foreach ($plan['update'] as $server) {
-            // save() is an upsert: every storable column follows the source, the row keeps its state.
-            $this->save($server->toRow() + [
-                'missing' => false,
-                'enabled' => (bool)($existing[$server->name]['enabled'] ?? false),
-                'last_error' => $existing[$server->name]['last_error'] ?? null,
-            ]);
+            $this->save(ServerMerger::updatedRow($server, $existing[$server->name] ?? []));
             $names[] = $server->name;
         }
         foreach ($plan['missing'] as $name) {

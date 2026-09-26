@@ -68,4 +68,20 @@ final class ServerMergerTest extends TestCase
         self::assertSame([], $plan['insert']);
         self::assertSame([], $plan['update']);
     }
+
+    #[Test]
+    public function aRescanKeepsTheAdminsTrustSettings(): void
+    {
+        $existing = ['name' => 'docs', 'enabled' => true, 'read_only' => true, 'output_public' => true, 'last_error' => 'x'];
+        $again = new DiscoveredServer('docs', [], [], null, DiscoveredServer::SOURCE_MCP_JSON, url: 'https://new.test/mcp');
+
+        $row = ServerMerger::updatedRow($again, $existing);
+
+        self::assertSame('https://new.test/mcp', $row['url'], 'connection details follow the source');
+        self::assertTrue($row['enabled']);
+        self::assertTrue($row['read_only'], 'the admin declared it read-only; a rescan must not undo that');
+        self::assertTrue($row['output_public']);
+        self::assertFalse($row['missing']);
+        self::assertSame('x', $row['last_error']);
+    }
 }

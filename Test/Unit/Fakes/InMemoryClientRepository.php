@@ -26,4 +26,9 @@ final class InMemoryClientRepository extends ClientRepository
     {
         $this->clients[$serverCode] = $client;
     }
+
+    public function delete(string $serverCode): void
+    {
+        unset($this->clients[$serverCode]);
+    }
 }
