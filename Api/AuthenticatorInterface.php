@@ -24,4 +24,10 @@ interface AuthenticatorInterface
      * (e.g. an OAuth token refresh) so the request is retried once.
      */
     public function onUnauthorized(?int $adminUserId): bool;
+
+    /**
+     * Whether requests for this admin user can be authenticated at all (e.g. the user connected an
+     * OAuth account). Tools of a server without credentials are not offered to that user.
+     */
+    public function hasCredentials(?int $adminUserId): bool;
 }

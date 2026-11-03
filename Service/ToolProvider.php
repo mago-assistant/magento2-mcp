@@ -62,7 +62,8 @@ class ToolProvider
             if (!$server->isEnabled()) {
                 continue;
             }
-            $definition = $this->getDefinition($server);
+            // Without credentials for the current user only a list cached for someone else can be shown.
+            $definition = $this->getDefinition($server, false, $server->getAuthenticator()->hasCredentials(null));
             if ($definition['tools'] === []) {
                 continue;
             }
@@ -89,11 +90,11 @@ class ToolProvider
     }
 
     /**
-     * The server's allowed tools and instructions, from cache unless $refresh is set
+     * The server's allowed tools and instructions, from cache unless $refresh is set; $fetch false only reads the cache
      *
      * @return array{tools: array<int, array<string, mixed>>, instructions: string, error?: string}
      */
-    public function getDefinition(ServerInterface $server, bool $refresh = false): array
+    public function getDefinition(ServerInterface $server, bool $refresh = false, bool $fetch = true): array
     {
         $cacheKey = self::CACHE_PREFIX . $server->getCode() . '_' . hash('sha256', $server->getUrl());
         if (!$refresh) {
@@ -113,6 +114,10 @@ class ToolProvider
             }
         }
 
+        if (!$fetch) {
+            return ['tools' => [], 'instructions' => ''];
+        }
+
         try {
             $listed = $this->client->listTools($server);
             $allowed = $server->getAllowedTools();
@@ -124,6 +129,9 @@ class ToolProvider
                 'instructions' => $listed['instructions'],
             ];
             $lifetime = self::CACHE_LIFETIME;
+        } catch (McpAuthenticationException $e) {
+            // Not cached: whether it fails depends on the user, the next one may be connected.
+            return ['tools' => [], 'instructions' => '', 'error' => $e->getMessage()];
         } catch (McpException $e) {
             $this->errorLogger->addLog('MCP', $e->getMessage());
             $definition = ['tools' => [], 'instructions' => '', 'error' => $e->getMessage()];

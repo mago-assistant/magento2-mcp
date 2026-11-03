@@ -116,6 +116,11 @@ final class ClientTest extends TestCase
                 $this->refreshes++;
                 return true;
             }
+
+            public function hasCredentials(?int $adminUserId): bool
+            {
+                return true;
+            }
         };
         $client = $this->client([
             new MockResponse('', ['http_code' => 401]),

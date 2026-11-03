@@ -154,7 +154,11 @@ class Client
             $response = $this->post($server, $body, $adminUserId);
         }
         if ($response['status'] === 401) {
-            throw new McpException(sprintf('MCP server "%s" rejected the credentials (401).', $server->getLabel()));
+            throw new McpAuthenticationException(sprintf(
+                'MCP server "%s" rejected the credentials (401). Connect or reconnect it under Stores > '
+                . 'Configuration > Mago Assistant > MCP Servers.',
+                $server->getLabel()
+            ));
         }
 
         return $response + ['id' => $id];

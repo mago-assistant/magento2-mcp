@@ -48,6 +48,11 @@ interface ServerInterface
     public function getFieldClassification(string $toolName): array;
 
     /**
+     * Name of a Mago skill this server replaces for admin users who can use it (e.g. "rumvision"), or ''
+     */
+    public function getReplacesSkill(): string;
+
+    /**
      * Extra guidance appended to an error a remote tool returned (e.g. "list the domains first"), or ''
      */
     public function getErrorHint(string $toolName, string $error): string;

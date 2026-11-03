@@ -9,6 +9,7 @@ namespace MagoAssistant\Mcp\Test\Unit\Plugin;
 use MagoAssistant\Mago\Api\Tool\ToolInterface;
 use MagoAssistant\Mago\Service\Skills\PermissionChecker;
 use MagoAssistant\Mago\Service\Tool\ToolRegistry;
+use MagoAssistant\Mcp\Api\AuthenticatorInterface;
 use MagoAssistant\Mcp\Plugin\AddMcpToolsToRegistry;
 use MagoAssistant\Mcp\Service\Client;
 use MagoAssistant\Mcp\Service\InstructionGate;
@@ -75,6 +76,31 @@ final class AddMcpToolsToRegistryTest extends TestCase
         self::assertSame($builtIn, $this->plugin->afterGetToolByName($registry, $builtIn, 'mcp_test__read_wiki'));
         self::assertSame($this->mcpTool, $this->plugin->afterGetToolByName($registry, null, 'mcp_test__read_wiki'));
         self::assertNull($this->plugin->afterGetToolByName($registry, null, 'unknown'));
+    }
+
+    #[Test]
+    public function offersAnOAuthServerOnlyToTheUserWhoConnectedAndDropsTheReplacedSkill(): void
+    {
+        $authenticator = $this->createStub(AuthenticatorInterface::class);
+        $authenticator->method('hasCredentials')->willReturnCallback(static fn (?int $userId): bool => $userId === 1);
+        $tool = new McpTool(
+            new FakeMcpServer('rumvision', $authenticator, [], [], 'rumvision'),
+            $this->createStub(Client::class),
+            ['name' => 'query-metrics-tool', 'annotations' => ['readOnlyHint' => true]],
+            new InstructionGate()
+        );
+        $provider = $this->createStub(ToolProvider::class);
+        $provider->method('getTools')->willReturn([$tool]);
+        $plugin = new AddMcpToolsToRegistry($provider);
+        $skill = $this->createStub(ToolInterface::class);
+        $builtIn = ['rumvision' => $skill, 'sales_data' => $skill];
+        $registry = $this->registry(['mcp_rumvision__query_metrics_tool:read' => true]);
+
+        $connected = $plugin->afterGetEnabledTools($registry, $builtIn, 1);
+        $other = $plugin->afterGetEnabledTools($registry, $builtIn, 2);
+
+        self::assertSame(['sales_data', 'mcp_rumvision__query_metrics_tool'], array_keys($connected));
+        self::assertSame(['rumvision', 'sales_data'], array_keys($other));
     }
 
     /**

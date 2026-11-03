@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="mago_mcp_oauth_client" resource="default" engine="innodb" comment="Mago MCP OAuth client registrations">
+        <column xsi:type="varchar" name="server_code" nullable="false" length="64" comment="MCP server code"/>
+        <column xsi:type="varchar" name="server_url" nullable="false" length="255" comment="MCP server URL the registration belongs to"/>
+        <column xsi:type="varchar" name="redirect_uri" nullable="false" length="255" comment="Registered redirect URI"/>
+        <column xsi:type="varchar" name="client_id" nullable="false" length="255" comment="Client ID"/>
+        <column xsi:type="text" name="client_secret" nullable="true" comment="Encrypted client secret"/>
+        <column xsi:type="text" name="metadata" nullable="false" comment="Discovered endpoints, resource and scopes (JSON)"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="server_code"/>
+        </constraint>
+    </table>
+    <table name="mago_mcp_token" resource="default" engine="innodb" comment="Mago MCP OAuth tokens per admin user">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="admin_user_id" unsigned="true" nullable="false" comment="Admin User ID"/>
+        <column xsi:type="varchar" name="server_code" nullable="false" length="64" comment="MCP server code"/>
+        <column xsi:type="text" name="access_token" nullable="false" comment="Encrypted access token"/>
+        <column xsi:type="text" name="refresh_token" nullable="true" comment="Encrypted refresh token"/>
+        <column xsi:type="datetime" name="expires_at" nullable="true" comment="Access token expiry (UTC)"/>
+        <column xsi:type="varchar" name="scope" nullable="true" length="255" comment="Granted scope"/>
+        <column xsi:type="timestamp" name="updated_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="true" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="MAGO_MCP_TOKEN_USER_SERVER">
+            <column name="admin_user_id"/>
+            <column name="server_code"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="MAGO_MCP_TOKEN_ADMIN_USER_ID_ADMIN_USER_USER_ID" table="mago_mcp_token" column="admin_user_id" referenceTable="admin_user" referenceColumn="user_id" onDelete="CASCADE"/>
+    </table>
+</schema>

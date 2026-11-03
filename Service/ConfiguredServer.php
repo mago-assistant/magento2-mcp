@@ -10,7 +10,9 @@ use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Encryption\EncryptorInterface;
 use MagoAssistant\Mcp\Api\AuthenticatorInterface;
 use MagoAssistant\Mcp\Api\ServerInterface;
+use MagoAssistant\Mcp\Model\Config\Source\AuthType;
 use MagoAssistant\Mcp\Service\Auth\BearerTokenAuthenticator;
+use MagoAssistant\Mcp\Service\OAuth\OAuthAuthenticatorFactory;
 use MagoAssistant\Mago\Service\Privacy\PiiClass;
 
 /**
@@ -21,18 +23,25 @@ class ConfiguredServer implements ServerInterface
 {
     private const DEFAULT_TIMEOUT = 20;
 
+    private ?AuthenticatorInterface $authenticator = null;
+
     /**
      * @param ScopeConfigInterface $scopeConfig
      * @param EncryptorInterface $encryptor
+     * @param OAuthAuthenticatorFactory $oauthAuthenticatorFactory
      * @param string $code
      * @param string $configPath
+     * @param array<string, array<string, array{0: string, 1?: string}>> $classificationOverrides
+     *        Per remote tool, replaces the server-wide classification when output is marked public
      * @param array<string, string> $errorHints Error text fragment => hint appended to that error
      */
     public function __construct(
         private readonly ScopeConfigInterface $scopeConfig,
         private readonly EncryptorInterface $encryptor,
+        private readonly OAuthAuthenticatorFactory $oauthAuthenticatorFactory,
         private readonly string $code = 'custom',
         private readonly string $configPath = 'mago_mcp/custom',
+        private readonly array $classificationOverrides = [],
         private readonly array $errorHints = []
     ) {
     }
@@ -58,11 +67,20 @@ class ConfiguredServer implements ServerInterface
         return trim($this->value('url'));
     }
 
+    public function isOAuth(): bool
+    {
+        return $this->value('auth_type') === AuthType::OAUTH;
+    }
+
     public function getAuthenticator(): AuthenticatorInterface
     {
-        $token = $this->value('token');
-
-        return new BearerTokenAuthenticator($token !== '' ? trim($this->encryptor->decrypt($token)) : '');
+        if ($this->authenticator === null) {
+            $token = $this->value('token');
+            $this->authenticator = $this->isOAuth()
+                ? $this->oauthAuthenticatorFactory->create($this->code)
+                : new BearerTokenAuthenticator($token !== '' ? trim($this->encryptor->decrypt($token)) : '');
+        }
+        return $this->authenticator;
     }
 
     public function getTimeout(): int
@@ -79,7 +97,15 @@ class ConfiguredServer implements ServerInterface
     public function getFieldClassification(string $toolName): array
     {
         // The admin asserts per server that its output holds no personal data; otherwise fail closed.
-        return $this->value('output_public') === '1' ? [PiiClass::ANY => [PiiClass::PUBLIC]] : [];
+        if ($this->value('output_public') !== '1') {
+            return [];
+        }
+        return $this->classificationOverrides[$toolName] ?? [PiiClass::ANY => [PiiClass::PUBLIC]];
+    }
+
+    public function getReplacesSkill(): string
+    {
+        return trim($this->value('replaces_skill'));
     }
 
     public function getErrorHint(string $toolName, string $error): string
