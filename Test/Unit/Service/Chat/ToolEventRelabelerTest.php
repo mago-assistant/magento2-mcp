@@ -53,7 +53,7 @@ final class ToolEventRelabelerTest extends TestCase
             ['name' => 'code-runner', 'description' => 'Run PHP.', 'inputSchema' => ['type' => 'object']],
             ...$extraTools,
         ];
-        $servers->add('demo', true);
+        $servers->add('demo', true, 'composer', ['allowed_tools' => array_column($transport->tools['demo'], 'name')]);
         $config = new Config(new FakeScopeConfig([
             'mago/mcp/enabled' => '1',
             'mago/mcp/process_timeout' => '5',

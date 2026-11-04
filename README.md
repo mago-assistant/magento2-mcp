@@ -81,16 +81,24 @@ trailing `_mcp_server` or `_mcp` are removed, each only if something remains. A 
 
 ## Enable a server
 
-In the admin: **Stores > Admin Assistant > MCP Servers** is a grid of known servers with Enable and
-Disable per row and Rescan and Refresh tool lists as toolbar buttons.
+In the admin: **Stores > Admin Assistant > MCP Servers** is a grid of known servers, built like Mago's
+own Skills & Permissions grid: filterable columns for source, transport and authentication, the tool
+count (exposed and withheld), the status, and per row Edit, Enable or Disable, Delete and the OAuth
+connection; Add Server, Rescan and Refresh Tool Lists are the toolbar buttons.
 
-**Add server** opens a form for a remote server: label, URL, authentication, bearer token, timeout, the
-skill it replaces, and the trust settings (read-only, public output, allowed tools). The name is derived
-from the label once and never changes, because it keys OAuth tokens, the cache and the per-user
-permission rows. A blank token field on edit keeps the stored token, which is never shown again, but only
-while the URL stays on the same host: pointing the row at another host requires typing the token again.
-**Edit** on a discovered row shows its connection details as text and changes only its trust settings,
-the allowed-tool list among them. **Delete** is offered on rows added here;
+**Edit** opens the server's page: an information table, then **Tools**, the scanned tool list as a grid
+of checkboxes in three groups, reads, writes, and execution and credential tools. A ticked tool is
+exposed as a skill; an unticked one is not a skill for anyone. Each row shows the tool's type, the
+Magento resource a role needs for it, its first sentence, and a link to its Skills & Permissions page.
+The dangerous group starts unticked. Below the tools come the trust settings (read-only, public output)
+and, on an OAuth server, your own connection; the actions are at the bottom, as on Mago's pages.
+
+**Add server** opens the same page for a remote server with a connection section: label, URL,
+authentication, bearer token, timeout, the skill it replaces, enabled. The name is derived from the label
+once and never changes, because it keys OAuth tokens, the cache and the per-user permission rows. A blank
+token field on edit keeps the stored token, which is never shown again, but only while the URL stays on
+the same host: pointing the row at another host requires typing the token again. A discovered row shows
+its connection details as text. **Delete** is offered on rows added here;
 it removes every admin's OAuth tokens and the client registration with the row, and so does changing an
 OAuth server's URL, whether on the form or through a rescan of its source.
 
@@ -216,12 +224,17 @@ copy is encrypted. This module registers no definition itself. The registry's de
 
 `allowedTools` is the list of tools a server may expose at all: a name not on the list is not a skill,
 for anyone, whatever grants they hold. It is one of the administrator's trust settings on every row,
-discovered or manual (**Allowed tools** on the edit page, one name per line, empty for all), and a rescan
-keeps it; the source's list counts when the row is first inserted. It is the way to keep a discovered
-server's code runner or SQL tool out of the assistant without disabling the server or touching every
-admin's permissions. It also saves tokens: every exposed tool's definition is sent to the model on every
-turn, so a server with sixty tools you use three of is worth trimming. Who may call a listed tool is
-still Mago's ACL and per-user table.
+discovered or manual (the **Tools** checkboxes on the edit page), and a rescan keeps it; the source's
+list counts when the row is first inserted.
+
+**Empty means every tool except the dangerous ones.** A tool that runs code, SQL or commands or deals
+in credentials (the execution and credential words under "Read or write") is *withheld* until the list
+names it: listed in the grid's count and in `mago:mcp:list` as `withheld`, never a skill. So a server
+that is discovered and enabled, Bricklayer or magerun, exposes its lookups and its ordinary writes and
+nothing else; to use `code-runner`, write every tool you want, that one included, into the list. An
+explicit list is exact: nothing outside it is exposed. The list also saves tokens: every exposed tool's
+definition is sent to the model on every turn, so a server with sixty tools you use three of is worth
+trimming. Who may call an exposed tool is still Mago's ACL and per-user table.
 
 ## How a tool reaches the model
 
@@ -412,12 +425,12 @@ to try next.
 ## Security
 
 An execution tool, a code runner, a raw SQL tool, a batch runner, is arbitrary PHP or SQL running on
-the store as the web server user, one confirmation away. It therefore has its own grant,
+the store as the web server user, one confirmation away. It is therefore withheld by default: not a
+skill until the server's **Allowed tools** names it. Once named, it has its own grant,
 `MCP Tools - Execute`, which `MCP Tools - Write` does not include; it is always an irreversible write,
 so the card asks for the acknowledgement and names the risk; and the read-only declaration never
-reaches it. Grant `execute` to the few roles that deploy code. Where even that is too much, take the
-tool off the server's **Allowed tools** and it is not a skill at all. A tool that executes without
-saying so in its name (`database-query`) is a plain write: keep it out through **Allowed tools**.
+reaches it. Grant `execute` to the few roles that deploy code. Credential tools (`env`, `secret`,
+`password`, ... in the name) are withheld the same way.
 
 What an MCP tool returns is gated by the Magento resource its name points at ("Which grants a call
 needs" above), so the assistant cannot read customers, orders or configuration for an admin who may not

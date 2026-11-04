@@ -29,6 +29,8 @@ final class CatalogEntry
      * @param array<string,array{0:string,1?:string}>|null $fieldClassification The tool's override from a
      *        module definition, or null for the server-wide rule
      * @param bool $executionSurface The name says the tool runs code, SQL or commands
+     * @param bool $withheld An execution or credential tool the server's allowed-tool list does not name:
+     *        listed for the administrator, never a skill
      */
     public function __construct(
         public readonly string $server,
@@ -42,7 +44,8 @@ final class CatalogEntry
         public readonly string $label = '',
         public readonly bool $outputPublic = false,
         public readonly ?array $fieldClassification = null,
-        public readonly bool $executionSurface = false
+        public readonly bool $executionSurface = false,
+        public readonly bool $withheld = false
     ) {
     }
 

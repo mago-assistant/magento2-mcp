@@ -405,6 +405,29 @@ final class ToolCatalogTest extends TestCase
     }
 
     #[Test]
+    public function executionAndCredentialToolsAreWithheldUntilTheAllowedListNamesThem(): void
+    {
+        $this->transport->tools['demo'][] = ['name' => 'config_env_show', 'description' => '', 'inputSchema' => ['type' => 'object']];
+        $this->servers->add('demo', true);
+
+        $entries = $this->catalog()->entriesForServer('demo');
+        $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
+
+        self::assertTrue($byTool['code-runner']->withheld, 'an execution tool is listed but withheld by default');
+        self::assertTrue($byTool['config_env_show']->withheld, 'so is a credential tool');
+        self::assertFalse($byTool['product-delete']->withheld, 'an ordinary write is exposed, behind the card');
+        self::assertFalse($byTool['product-list']->withheld);
+
+        $this->servers->rows['demo']['allowed_tools'] = ['product-list', 'code-runner'];
+        $this->catalog()->refresh('demo');
+        $entries = $this->catalog()->entriesForServer('demo');
+        $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
+        self::assertSame(['product-list', 'code-runner'], array_keys($byTool), 'an explicit list is exact');
+        self::assertFalse($byTool['code-runner']->withheld, 'named, so exposed (and still an execution write)');
+        self::assertSame(ModeClassifier::WRITE, $byTool['code-runner']->mode);
+    }
+
+    #[Test]
     public function aMissingServerIsNotExposedThoughStillEnabled(): void
     {
         $this->servers->add('demo', true, 'composer', ['missing' => true]);

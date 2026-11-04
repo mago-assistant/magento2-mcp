@@ -8,11 +8,12 @@ namespace MagoAssistant\Mcp\Controller\Adminhtml\Servers;
 
 use Magento\Backend\App\Action;
 use Magento\Backend\App\Action\Context;
+use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\Controller\ResultInterface;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 
-class Refresh extends Action implements HttpPostActionInterface
+class Refresh extends Action implements HttpGetActionInterface, HttpPostActionInterface
 {
     public const ADMIN_RESOURCE = 'MagoAssistant_Mcp::manage';
 

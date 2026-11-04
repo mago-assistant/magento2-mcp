@@ -58,7 +58,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
             ['name' => 'product-delete', 'description' => 'Delete a product.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'code-runner', 'description' => 'Run PHP.', 'inputSchema' => ['type' => 'object']],
         ];
-        $this->servers->add('demo', true);
+        $this->servers->add('demo', true, 'composer', ['allowed_tools' => ['product-list', 'product-delete', 'code-runner']]);
     }
 
     private function errorLogger(): ErrorLogger
@@ -176,6 +176,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
     {
         $this->transport->tools['demo'][] = ['name' => 'customer-list', 'description' => '', 'inputSchema' => ['type' => 'object']];
         $this->transport->tools['demo'][] = ['name' => 'order-get', 'description' => '', 'inputSchema' => ['type' => 'object']];
+        $this->servers->rows['demo']['allowed_tools'] = [];
         $registry = new ToolRegistry(new FakePermissionChecker(), [$this->magoTool]);
 
         $editor = new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write']);

@@ -51,6 +51,10 @@ class SkillRegistry
             $gate = new InstructionGate();
             $skills = [];
             foreach ($this->catalog->entries($adminUserId) as $entry) {
+                if ($entry->withheld) {
+                    // Listed for the administrator (grid, CLI), never offered to the model.
+                    continue;
+                }
                 $skill = new McpSkill(
                     $entry,
                     $this->executor,

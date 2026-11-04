@@ -96,8 +96,30 @@ final class ServerInput
         return [
             'read_only' => self::checked($post, 'read_only'),
             'output_public' => self::checked($post, 'output_public'),
-            'allowed_tools' => self::lines((string)($post['allowed_tools'] ?? '')),
+            'allowed_tools' => self::names($post['allowed_tools'] ?? ''),
         ];
+    }
+
+    /**
+     * The allowed-tool names as the edit page posts them (one checkbox per scanned tool, so an array)
+     * or as a text field lists them (one per line).
+     *
+     * @return string[]
+     */
+    private static function names(mixed $value): array
+    {
+        if (is_array($value)) {
+            $names = [];
+            foreach ($value as $name) {
+                if (is_scalar($name) && trim((string)$name) !== '') {
+                    $names[] = trim((string)$name);
+                }
+            }
+
+            return array_values(array_unique($names));
+        }
+
+        return self::lines((string)$value);
     }
 
     /**

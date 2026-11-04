@@ -124,7 +124,7 @@ final class EscalationScenariosTest extends TestCase
             $this->tool('batch-execute'),
             $this->tool('product-list', ['destructiveHint' => true]),
             $this->tool('product-get'),
-        ], ['read_only' => true]);
+        ], ['read_only' => true, 'allowed_tools' => ['code-runner', 'batch-execute', 'product-list', 'product-get']]);
         $authorization = new FakeAuthorization(self::CONTENT_EDITOR);
         $registry = $this->registry($authorization, new FakePermissionChecker(allowWrite: false, allowRead: true));
         $toolAccess = new ToolAccess($authorization, new FakePermissionChecker(allowWrite: false, allowRead: true));
@@ -247,7 +247,9 @@ final class EscalationScenariosTest extends TestCase
     #[Test]
     public function theWriteGrantDoesNotCoverCodeExecution(): void
     {
-        $this->serverWithTools('bricklayer', [$this->tool('code-runner'), $this->tool('product-update')]);
+        $this->serverWithTools('bricklayer', [$this->tool('code-runner'), $this->tool('product-update')], [
+            'allowed_tools' => ['code-runner', 'product-update'],
+        ]);
         $writer = new FakeAuthorization([
             'MagoAssistant_Mago::assistant_read', 'MagoAssistant_Mago::assistant_write',
             'MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write',
@@ -288,7 +290,7 @@ final class EscalationScenariosTest extends TestCase
             $this->tool('db_info'),
             $this->tool('config_store_get'),
             $this->tool('config_env_show'),
-        ]);
+        ], ['allowed_tools' => ['db_info', 'config_store_get', 'config_env_show']]);
         $authorization = new FakeAuthorization(self::CONTENT_EDITOR);
         $registry = $this->registry($authorization, new FakePermissionChecker(allowWrite: false, allowRead: true));
 
@@ -367,6 +369,41 @@ final class EscalationScenariosTest extends TestCase
             self::assertStringNotContainsString('customer_list', $outside, 'nothing the server wrote stands outside a fence');
             self::assertStringNotContainsString('SYSTEM:', $outside);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Scenario 10 (fixed): a discovered server exposes nothing dangerous by default. Bricklayer and
+    // magerun are found and enabled with an empty allowed-tool list; their execution and credential
+    // tools are then listed for the administrator but are not skills for anyone, whatever grants a role
+    // holds, until the list names them.
+    // ---------------------------------------------------------------------------------------------
+
+    #[Test]
+    public function aDiscoveredServerWithholdsExecutionAndCredentialToolsByDefault(): void
+    {
+        $this->serverWithTools('bricklayer', [
+            $this->tool('code-runner'),
+            $this->tool('database-query'),
+            $this->tool('config_env_show'),
+            $this->tool('product-update'),
+            $this->tool('product-list'),
+        ]);
+        $everything = new FakeAuthorization([
+            ...self::CONTENT_EDITOR, 'MagoAssistant_Mago::assistant_write',
+            'MagoAssistant_Mcp::use_write', 'MagoAssistant_Mcp::execute', 'Magento_Backend::system', 'Magento_Config::config',
+        ]);
+        $registry = $this->registry($everything, new FakePermissionChecker(true, true));
+
+        self::assertSame(
+            ['mcp_bricklayer__product_update', 'mcp_bricklayer__product_list'],
+            array_keys($registry->getEnabledTools(self::ADMIN_ID)),
+            'even a role holding every grant is not offered the withheld tools'
+        );
+        self::assertNull($registry->getToolByName('mcp_bricklayer__code_runner'), 'not a skill at all');
+        self::assertNull($registry->getToolByName('mcp_bricklayer__database_query'));
+        self::assertNull($registry->getToolByName('mcp_bricklayer__config_env_show'));
+        $withheld = array_filter($this->catalog()->entriesForServer('bricklayer'), static fn ($e): bool => $e->withheld);
+        self::assertSame(['code-runner', 'database-query', 'config_env_show'], array_values(array_map(static fn ($e) => $e->tool, $withheld)), 'but listed for the admin');
     }
 
     // ---------------------------------------------------------------------------------------------

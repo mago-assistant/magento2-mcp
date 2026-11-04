@@ -26,6 +26,16 @@ need new grants.
 - **Allowed tools is a trust setting on every row**, discovered rows included, and a rescan keeps it.
   Before, only a manual row had the list, so a discovered server's code runner could be kept out only
   by disabling the server or editing every admin's permissions.
+- **The admin pages are built like Mago's own.** The servers grid is a UI listing with filters, badges,
+  the tool count and row actions, with Add Server, Rescan and Refresh Tool Lists as toolbar buttons; the
+  edit page shows the scanned tools as a grid of checkboxes in three groups (reads, writes, execution
+  and credential tools), each with its type, the Magento resource it needs, its description and a link
+  to its Skills & Permissions page, followed by the trust settings and the actions.
+- **Execution and credential tools are withheld until the tool list ticks them.** An empty list now
+  means every tool except those; they stay listed (grid count, `mago:mcp:list` says `withheld`) but are
+  not skills for anyone. A discovered and enabled Bricklayer or magerun therefore exposes its lookups
+  and ordinary writes and nothing else. To keep using `code-runner` or `database-query`, write the
+  tools you want into the server's list.
 - **`.mcp.json` http entries follow the admin form's URL rule**: `https://`, or `http://` on a local host
   only; anything else is skipped and logged, so a bearer token in the file is never sent in clear.
 - **Credentials in results are masked** (`Service\Privacy\SecretScrub`): a value after a key such as

@@ -81,13 +81,14 @@ class ListServers extends Command
         ));
         foreach ($this->catalog->entriesForServer((string)$name) as $entry) {
             $output->writeln(sprintf(
-                '%-36s %-6s (%s)%s%s%s',
+                '%-36s %-6s (%s)%s%s%s%s',
                 OutputFormatter::escape($entry->tool),
                 $entry->mode,
                 $entry->modeOrigin,
                 $entry->irreversible ? ' irreversible' : '',
                 $entry->personalData ? ' personal-data' : '',
-                $this->classifier->isExecutionSurface($entry->tool) ? ' execution' : ''
+                $this->classifier->isExecutionSurface($entry->tool) ? ' execution' : '',
+                $entry->withheld ? ' <comment>withheld: name it under Allowed tools to expose</comment>' : ''
             ));
         }
 

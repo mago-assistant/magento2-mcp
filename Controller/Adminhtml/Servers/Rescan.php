@@ -8,13 +8,14 @@ namespace MagoAssistant\Mcp\Controller\Adminhtml\Servers;
 
 use Magento\Backend\App\Action;
 use Magento\Backend\App\Action\Context;
+use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\Controller\ResultInterface;
 use MagoAssistant\Mcp\Api\ServerRepositoryInterface;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Discovery\ServerScanner;
 
-class Rescan extends Action implements HttpPostActionInterface
+class Rescan extends Action implements HttpGetActionInterface, HttpPostActionInterface
 {
     public const ADMIN_RESOURCE = 'MagoAssistant_Mcp::manage';
 

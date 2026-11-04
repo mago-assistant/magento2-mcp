@@ -48,7 +48,7 @@ final class SkillRegistryTest extends TestCase
         $this->transport->tools['acme'] = [
             ['name' => 'order-list', 'description' => 'List orders.', 'inputSchema' => ['type' => 'object']],
         ];
-        $this->servers->add('demo', true);
+        $this->servers->add('demo', true, 'composer', ['allowed_tools' => ['product-list', 'product-delete', 'code-runner']]);
         $this->servers->add('acme', false);
     }
 
@@ -155,6 +155,7 @@ final class SkillRegistryTest extends TestCase
             ['name' => 'a.b', 'description' => 'First.', 'inputSchema' => ['type' => 'object']],
             ['name' => 'a:b', 'description' => 'Second.', 'inputSchema' => ['type' => 'object']],
         ];
+        $this->servers->rows['demo']['allowed_tools'] = [];
         $registry = $this->registry();
 
         $skills = $registry->all();
@@ -182,6 +183,7 @@ final class SkillRegistryTest extends TestCase
             'description' => 'Too long.',
             'inputSchema' => ['type' => 'object'],
         ];
+        $this->servers->rows['demo']['allowed_tools'] = [];
         $registry = $this->registry();
 
         $names = self::names($registry->all());

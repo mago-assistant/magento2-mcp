@@ -196,7 +196,9 @@ class ToolCatalog
         }
         $entries = [];
         $definition = $this->definitionFor($row);
-        // A token-cost filter, not a permission: a name not on the list is not a skill at all.
+        // A name not on the list is not a skill at all. An empty list means every tool except the ones
+        // that run code, SQL or commands or deal in credentials: those are withheld until the list
+        // names them, so a server that is discovered and enabled exposes nothing dangerous by default.
         $allowed = array_map('strval', is_array($row['allowed_tools'] ?? null) ? $row['allowed_tools'] : []);
         // The administrator's declaration: every tool of this server is a read, whatever its name says.
         $readOnly = (bool)($row['read_only'] ?? false);
@@ -207,6 +209,7 @@ class ToolCatalog
             }
             $annotations = is_array($tool['annotations'] ?? null) ? $tool['annotations'] : [];
             $execution = $this->classifier->isExecutionSurface($toolName);
+            $withheld = ($execution || $this->classifier->isSensitive($toolName)) && !in_array($toolName, $allowed, true);
             [$mode, $origin] = $this->modeOf($toolName, $annotations, $readOnly, $execution);
             // A read tool is never irreversible, whatever IRREVERSIBLE_WORDS or destructiveHint says. An
             // execution tool always is: the card then needs the acknowledgement, and "the assistant cannot
@@ -227,7 +230,8 @@ class ToolCatalog
                 (string)($row['label'] ?? ''),
                 (bool)($row['output_public'] ?? false),
                 $definition?->fieldClassificationOverrides[$toolName] ?? null,
-                $execution
+                $execution,
+                $withheld
             );
         }
 

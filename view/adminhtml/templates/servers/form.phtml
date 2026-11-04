@@ -8,146 +8,276 @@
 $row = $block->getRow();
 $manual = $block->isManual();
 $authType = (string)$block->getValue('auth_type', 'none');
+$toolRows = $block->getToolRows();
+$groups = $block->getToolGroups();
+$badgeClass = ['read' => 'is-ok', 'write' => 'is-warn', 'execution' => 'is-danger'];
 ?>
-<form method="post" action="<?= $escaper->escapeUrl($block->getSaveUrl()) ?>" class="admin__fieldset mago-mcp-form">
+
+<?php if ($row !== null): ?>
+<div class="admin__page-section">
+    <div class="admin__page-section-title">
+        <span class="title"><?= $escaper->escapeHtml(__('Server Information')) ?></span>
+    </div>
+    <div class="admin__page-section-content">
+        <table class="admin__table-secondary">
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Name')) ?></th>
+                <td><?= $escaper->escapeHtml((string)$row['name']) ?></td>
+            </tr>
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Source')) ?></th>
+                <td><?= $escaper->escapeHtml((string)$row['source']) ?><?php if (!$manual): ?> <span class="admin__field-note" style="display:inline"><?= $escaper->escapeHtml(__('The connection details follow this source on every rescan; the settings below are yours.')) ?></span><?php endif; ?></td>
+            </tr>
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Transport')) ?></th>
+                <td><?= $escaper->escapeHtml((string)$row['transport']) ?></td>
+            </tr>
+            <tr>
+                <th><?= $escaper->escapeHtml($row['transport'] === 'http' ? __('URL') : __('Command')) ?></th>
+                <td><code><?= $escaper->escapeHtml($row['transport'] === 'http' ? (string)$row['url'] : implode(' ', $row['command'])) ?></code></td>
+            </tr>
+            <?php if ($row['transport'] === 'http'): ?>
+                <tr>
+                    <th><?= $escaper->escapeHtml(__('Authentication')) ?></th>
+                    <td><?= $escaper->escapeHtml((string)$row['auth_type']) ?></td>
+                </tr>
+            <?php endif; ?>
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Enabled')) ?></th>
+                <td><?= $escaper->escapeHtml($row['enabled'] ? __('Yes') : __('No')) ?></td>
+            </tr>
+            <?php if ((string)($row['last_error'] ?? '') !== ''): ?>
+                <tr>
+                    <th><?= $escaper->escapeHtml(__('Status')) ?></th>
+                    <td><?= $escaper->escapeHtml((string)$row['last_error']) ?></td>
+                </tr>
+            <?php endif; ?>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<form id="mago-mcp-server-form" method="post" action="<?= $escaper->escapeUrl($block->getSaveUrl()) ?>">
     <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
     <input type="hidden" name="existing_name" value="<?= $escaper->escapeHtmlAttr((string)($row['name'] ?? '')) ?>"/>
 
-    <?php if (!$manual): ?>
-        <p><?= $escaper->escapeHtml(__('This server comes from %1: its connection details follow that source on every rescan. Only its trust settings below are yours to change.', (string)$row['source'])) ?></p>
+    <?php if ($manual): ?>
+        <div class="admin__page-section">
+            <div class="admin__page-section-title">
+                <span class="title"><?= $escaper->escapeHtml(__('Connection')) ?></span>
+            </div>
+            <div class="admin__page-section-content">
+                <fieldset class="admin__fieldset">
+                    <div class="admin__field _required">
+                        <label class="admin__field-label" for="mago-mcp-label"><span><?= $escaper->escapeHtml(__('Label')) ?></span></label>
+                        <div class="admin__field-control">
+                            <input id="mago-mcp-label" name="label" type="text" class="admin__control-text" maxlength="128" required
+                                   value="<?= $escaper->escapeHtmlAttr((string)$block->getValue('label')) ?>"/>
+                            <?php if ($row !== null): ?>
+                                <div class="admin__field-note"><?= $escaper->escapeHtml(__('The name "%1" is fixed; editing the label never renames the server.', (string)$row['name'])) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="admin__field _required">
+                        <label class="admin__field-label" for="mago-mcp-url"><span><?= $escaper->escapeHtml(__('URL')) ?></span></label>
+                        <div class="admin__field-control">
+                            <input id="mago-mcp-url" name="url" type="url" class="admin__control-text" required
+                                   placeholder="https://mcp.example.com/mcp"
+                                   value="<?= $escaper->escapeHtmlAttr((string)$block->getValue('url')) ?>"/>
+                            <div class="admin__field-note"><?= $escaper->escapeHtml(__('The Streamable HTTP endpoint. https:// is required; http:// only for localhost and hosts ending in .local, .internal, .docker or .test.')) ?></div>
+                        </div>
+                    </div>
+                    <div class="admin__field">
+                        <label class="admin__field-label" for="mago-mcp-auth"><span><?= $escaper->escapeHtml(__('Authentication')) ?></span></label>
+                        <div class="admin__field-control">
+                            <select id="mago-mcp-auth" name="auth_type" class="admin__control-select">
+                                <?php foreach (['none' => __('None'), 'bearer' => __('Bearer token, shared by every admin'), 'oauth' => __('OAuth, each admin connects their own account')] as $value => $label): ?>
+                                    <option value="<?= $escaper->escapeHtmlAttr($value) ?>"<?= $authType === $value ? ' selected' : '' ?>><?= $escaper->escapeHtml($label) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="admin__field">
+                        <label class="admin__field-label" for="mago-mcp-token"><span><?= $escaper->escapeHtml(__('Bearer token')) ?></span></label>
+                        <div class="admin__field-control">
+                            <input id="mago-mcp-token" name="bearer_token" type="password" class="admin__control-text" autocomplete="new-password" value=""
+                                   placeholder="<?= $escaper->escapeHtmlAttr($row !== null ? (string)__('Leave blank to keep the stored token') : '') ?>"/>
+                            <div class="admin__field-note"><?= $escaper->escapeHtml(__('Only for bearer authentication. Stored encrypted and never shown again.')) ?></div>
+                        </div>
+                    </div>
+                    <div class="admin__field">
+                        <label class="admin__field-label" for="mago-mcp-timeout"><span><?= $escaper->escapeHtml(__('Timeout (seconds)')) ?></span></label>
+                        <div class="admin__field-control">
+                            <input id="mago-mcp-timeout" name="timeout" type="number" min="1" max="3600" class="admin__control-text"
+                                   value="<?= $escaper->escapeHtmlAttr((string)$block->getValue('timeout')) ?>"/>
+                            <div class="admin__field-note"><?= $escaper->escapeHtml(__('Empty uses the global call timeout.')) ?></div>
+                        </div>
+                    </div>
+                    <div class="admin__field">
+                        <label class="admin__field-label" for="mago-mcp-replaces"><span><?= $escaper->escapeHtml(__('Replaces skill')) ?></span></label>
+                        <div class="admin__field-control">
+                            <input id="mago-mcp-replaces" name="replaces_skill" type="text" class="admin__control-text" maxlength="64"
+                                   value="<?= $escaper->escapeHtmlAttr((string)$block->getValue('replaces_skill')) ?>"/>
+                            <div class="admin__field-note"><?= $escaper->escapeHtml(__('Optional: a Mago skill hidden for every admin this server is offered to, so the assistant does not get the same data twice.')) ?></div>
+                        </div>
+                    </div>
+                    <div class="admin__field">
+                        <div class="admin__field-control">
+                            <div class="admin__field-option">
+                                <input id="mago-mcp-enabled" name="enabled" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isChecked('enabled') ? ' checked' : '' ?>/>
+                                <label class="admin__field-label" for="mago-mcp-enabled"><span><?= $escaper->escapeHtml(__('Enabled')) ?></span></label>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+        </div>
     <?php endif; ?>
 
-    <div class="admin__field _required">
-        <label class="admin__field-label" for="mago-mcp-label"><span><?= $escaper->escapeHtml(__('Label')) ?></span></label>
-        <div class="admin__field-control">
-            <?php if ($manual): ?>
-                <input id="mago-mcp-label" name="label" type="text" class="admin__control-text" maxlength="128" required
-                       value="<?= $escaper->escapeHtmlAttr((string)$block->getValue('label')) ?>"/>
-                <?php if ($row !== null): ?>
-                    <div class="admin__field-note"><?= $escaper->escapeHtml(__('Name: %1 (fixed; editing the label never renames the server).', (string)$row['name'])) ?></div>
-                <?php endif; ?>
+    <?php if ($row !== null): ?>
+    <div class="admin__page-section">
+        <div class="admin__page-section-title">
+            <span class="title"><?= $escaper->escapeHtml(__('Tools')) ?></span>
+        </div>
+        <div class="admin__page-section-content">
+            <?php if ($toolRows === []): ?>
+                <p><?= $escaper->escapeHtml($block->getToolsError()) ?></p>
             <?php else: ?>
-                <?= $escaper->escapeHtml((string)($row['label'] !== '' ? $row['label'] : $row['name'])) ?>
+                <p><?= $escaper->escapeHtml(__('%1 of %2 tools are exposed to the assistant. A tool that is not ticked is not a skill for anyone; who may use a ticked one is decided on its Skills & Permissions page.', $block->countExposed(), count($toolRows))) ?></p>
+                <table class="data-grid">
+                    <thead>
+                        <tr>
+                            <th class="data-grid-th data-grid-checkbox-cell"><?= $escaper->escapeHtml(__('Exposed')) ?></th>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Tool')) ?></th>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Type')) ?></th>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Needs')) ?></th>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Description')) ?></th>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Permissions')) ?></th>
+                        </tr>
+                    </thead>
+                    <?php $currentGroup = null; ?>
+                    <?php foreach ($toolRows as $tool): ?>
+                        <?php if ($tool['group'] !== $currentGroup): ?>
+                            <?php if ($currentGroup !== null): ?></tbody><?php endif; ?>
+                            <?php $currentGroup = $tool['group']; ?>
+                            <tbody>
+                            <tr>
+                                <td class="data-grid-td" colspan="6">
+                                    <strong><?= $escaper->escapeHtml($groups[$currentGroup]['title']) ?></strong>
+                                    <span class="admin__field-note" style="display:inline; margin-left: 8px;"><?= $escaper->escapeHtml($groups[$currentGroup]['note']) ?></span>
+                                </td>
+                            </tr>
+                        <?php endif; ?>
+                        <tr>
+                            <td class="data-grid-td data-grid-checkbox-cell">
+                                <div class="admin__field-option">
+                                    <input type="checkbox" class="admin__control-checkbox" name="allowed_tools[]"
+                                           id="mago-mcp-tool-<?= $escaper->escapeHtmlAttr($tool['skill']) ?>"
+                                           value="<?= $escaper->escapeHtmlAttr($tool['tool']) ?>"<?= $tool['exposed'] ? ' checked' : '' ?>/>
+                                    <label class="admin__field-label" for="mago-mcp-tool-<?= $escaper->escapeHtmlAttr($tool['skill']) ?>"><span></span></label>
+                                </div>
+                            </td>
+                            <td class="data-grid-td">
+                                <?= $escaper->escapeHtml($tool['tool']) ?>
+                                <?php if ($tool['personal_data']): ?>
+                                    <span class="mago-badge"><?= $escaper->escapeHtml(__('personal data')) ?></span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="data-grid-td">
+                                <span class="mago-badge <?= $escaper->escapeHtmlAttr($badgeClass[$tool['group']]) ?>"><?= $escaper->escapeHtml($tool['group'] === 'execution' ? __('execute') : $tool['type']) ?></span>
+                            </td>
+                            <td class="data-grid-td"><?= $escaper->escapeHtml($tool['resource'] ?? '') ?></td>
+                            <td class="data-grid-td"><?= $escaper->escapeHtml($tool['description']) ?></td>
+                            <td class="data-grid-td">
+                                <?php if ($tool['exposed'] && $row['enabled']): ?>
+                                    <a href="<?= $escaper->escapeUrl($tool['permissions_url']) ?>"><?= $escaper->escapeHtml(__('Edit')) ?></a>
+                                <?php else: ?>
+                                    <span class="admin__field-note" style="display:inline"><?= $escaper->escapeHtml(__('not a skill')) ?></span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <input type="hidden" name="allowed_tools_listed" value="1"/>
             <?php endif; ?>
         </div>
     </div>
-
-    <?php if (!$manual && $row['transport'] === 'stdio'): ?>
-        <div class="admin__field">
-            <span class="admin__field-label"><span><?= $escaper->escapeHtml(__('Command')) ?></span></span>
-            <div class="admin__field-control"><code><?= $escaper->escapeHtml((string)$block->getValue('command')) ?></code></div>
-        </div>
-    <?php else: ?>
-        <div class="admin__field _required">
-            <label class="admin__field-label" for="mago-mcp-url"><span><?= $escaper->escapeHtml(__('URL')) ?></span></label>
-            <div class="admin__field-control">
-                <?php if ($manual): ?>
-                    <input id="mago-mcp-url" name="url" type="url" class="admin__control-text" required
-                           placeholder="https://mcp.example.com/mcp"
-                           value="<?= $escaper->escapeHtmlAttr((string)$block->getValue('url')) ?>"/>
-                    <div class="admin__field-note"><?= $escaper->escapeHtml(__('The Streamable HTTP endpoint. https:// is required; http:// only for localhost and hosts ending in .local, .internal, .docker or .test.')) ?></div>
-                <?php else: ?>
-                    <code><?= $escaper->escapeHtml((string)$block->getValue('url')) ?></code>
-                <?php endif; ?>
-            </div>
-        </div>
-        <div class="admin__field">
-            <label class="admin__field-label" for="mago-mcp-auth"><span><?= $escaper->escapeHtml(__('Authentication')) ?></span></label>
-            <div class="admin__field-control">
-                <?php if ($manual): ?>
-                    <select id="mago-mcp-auth" name="auth_type" class="admin__control-select">
-                        <?php foreach (['none' => __('None'), 'bearer' => __('Bearer token, shared by every admin'), 'oauth' => __('OAuth, each admin connects their own account')] as $value => $label): ?>
-                            <option value="<?= $escaper->escapeHtmlAttr($value) ?>"<?= $authType === $value ? ' selected' : '' ?>><?= $escaper->escapeHtml($label) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                <?php else: ?>
-                    <?= $escaper->escapeHtml($authType) ?>
-                <?php endif; ?>
-            </div>
-        </div>
-        <?php if ($manual): ?>
-            <div class="admin__field">
-                <label class="admin__field-label" for="mago-mcp-token"><span><?= $escaper->escapeHtml(__('Bearer token')) ?></span></label>
-                <div class="admin__field-control">
-                    <input id="mago-mcp-token" name="bearer_token" type="password" class="admin__control-text" autocomplete="new-password" value=""
-                           placeholder="<?= $escaper->escapeHtmlAttr($row !== null ? (string)__('Leave blank to keep the stored token') : '') ?>"/>
-                    <div class="admin__field-note"><?= $escaper->escapeHtml(__('Only for bearer authentication. Stored encrypted and never shown again.')) ?></div>
-                </div>
-            </div>
-            <div class="admin__field">
-                <label class="admin__field-label" for="mago-mcp-timeout"><span><?= $escaper->escapeHtml(__('Timeout (seconds)')) ?></span></label>
-                <div class="admin__field-control">
-                    <input id="mago-mcp-timeout" name="timeout" type="number" min="1" max="3600" class="admin__control-text"
-                           value="<?= $escaper->escapeHtmlAttr((string)$block->getValue('timeout')) ?>"/>
-                    <div class="admin__field-note"><?= $escaper->escapeHtml(__('Empty uses the global call timeout.')) ?></div>
-                </div>
-            </div>
-            <div class="admin__field">
-                <label class="admin__field-label" for="mago-mcp-replaces"><span><?= $escaper->escapeHtml(__('Replaces skill')) ?></span></label>
-                <div class="admin__field-control">
-                    <input id="mago-mcp-replaces" name="replaces_skill" type="text" class="admin__control-text" maxlength="64"
-                           value="<?= $escaper->escapeHtmlAttr((string)$block->getValue('replaces_skill')) ?>"/>
-                    <div class="admin__field-note"><?= $escaper->escapeHtml(__('Optional: a Mago skill hidden for every admin this server is offered to, so the assistant does not get the same data twice.')) ?></div>
-                </div>
-            </div>
-            <div class="admin__field">
-                <div class="admin__field-control">
-                    <input id="mago-mcp-enabled" name="enabled" type="checkbox" value="1"<?= $block->isChecked('enabled') ? ' checked' : '' ?>/>
-                    <label for="mago-mcp-enabled"><?= $escaper->escapeHtml(__('Enabled')) ?></label>
-                </div>
-            </div>
-        <?php endif; ?>
     <?php endif; ?>
 
-    <fieldset class="admin__fieldset">
-        <legend class="admin__legend"><span><?= $escaper->escapeHtml(__('Trust settings')) ?></span></legend>
-        <div class="admin__field">
-            <label class="admin__field-label" for="mago-mcp-allowed"><span><?= $escaper->escapeHtml(__('Allowed tools')) ?></span></label>
-            <div class="admin__field-control">
-                <textarea id="mago-mcp-allowed" name="allowed_tools" class="admin__control-textarea" rows="4"><?= $escaper->escapeHtml((string)$block->getValue('allowed_tools')) ?></textarea>
-                <div class="admin__field-note"><?= $escaper->escapeHtml(__('One tool name per line; empty allows every tool. A tool not on the list is not a skill at all, for anyone: the way to keep a server\'s code runner or SQL tool out of the assistant. Yours to set on every row; a rescan keeps it. Fewer tools also means fewer tokens per turn.')) ?></div>
-            </div>
+    <div class="admin__page-section">
+        <div class="admin__page-section-title">
+            <span class="title"><?= $escaper->escapeHtml(__('Trust Settings')) ?></span>
         </div>
-        <div class="admin__field">
-            <div class="admin__field-control">
-                <input id="mago-mcp-read-only" name="read_only" type="checkbox" value="1"<?= $block->isChecked('read_only') ? ' checked' : '' ?>/>
-                <label for="mago-mcp-read-only"><?= $escaper->escapeHtml(__('Read-only server: tools with an unrecognised name are reads and run without the confirmation card')) ?></label>
-                <div class="admin__field-note"><?= $escaper->escapeHtml(__('For a server whose tools cannot change anything, such as a documentation lookup, where names like "resolve-library-id" would otherwise go through the card. It never reaches a tool that runs code, SQL or commands, deals in credentials, carries a write word (delete, cancel, kill) or is marked destructive by the server itself.')) ?></div>
-            </div>
+        <div class="admin__page-section-content">
+            <fieldset class="admin__fieldset">
+                <div class="admin__field">
+                    <div class="admin__field-control">
+                        <div class="admin__field-option">
+                            <input id="mago-mcp-read-only" name="read_only" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isChecked('read_only') ? ' checked' : '' ?>/>
+                            <label class="admin__field-label" for="mago-mcp-read-only"><span><?= $escaper->escapeHtml(__('Read-only server')) ?></span></label>
+                        </div>
+                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('Tools with an unrecognised name run as reads, without the confirmation card. For a server whose tools cannot change anything, such as a documentation lookup. It never reaches a tool that runs code, SQL or commands, deals in credentials, carries a write word (delete, cancel, kill) or is marked destructive by the server itself.')) ?></div>
+                    </div>
+                </div>
+                <div class="admin__field">
+                    <div class="admin__field-control">
+                        <div class="admin__field-option">
+                            <input id="mago-mcp-public" name="output_public" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isChecked('output_public') ? ' checked' : '' ?>/>
+                            <label class="admin__field-label" for="mago-mcp-public"><span><?= $escaper->escapeHtml(__('Public output')) ?></span></label>
+                        </div>
+                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('Results go to the AI provider as data. Only for a server that never returns personal data; otherwise each result is one text string that Mago\'s privacy scrub runs over. Credentials are masked either way.')) ?></div>
+                    </div>
+                </div>
+            </fieldset>
         </div>
-        <div class="admin__field">
-            <div class="admin__field-control">
-                <input id="mago-mcp-public" name="output_public" type="checkbox" value="1"<?= $block->isChecked('output_public') ? ' checked' : '' ?>/>
-                <label for="mago-mcp-public"><?= $escaper->escapeHtml(__('Public output: results go to the AI provider as data')) ?></label>
-                <div class="admin__field-note"><?= $escaper->escapeHtml(__('Only for a server that never returns personal data. Otherwise each result is one text string that Mago\'s privacy scrub runs over.')) ?></div>
-            </div>
-        </div>
-    </fieldset>
+    </div>
 
     <?php if ($block->hasConnection()): ?>
-        <fieldset class="admin__fieldset">
-            <legend class="admin__legend"><span><?= $escaper->escapeHtml(__('Your connection')) ?></span></legend>
-            <?php if ($block->isConnected()): ?>
-                <p><?= $escaper->escapeHtml(__('Connected with your own account. Only you can use it.')) ?></p>
-                <a class="action-default" href="<?= $escaper->escapeUrl($block->getDisconnectUrl()) ?>"><?= $escaper->escapeHtml(__('Disconnect my account')) ?></a>
-            <?php else: ?>
-                <p><?= $escaper->escapeHtml(__('Not connected. You will be asked to log in at the server.')) ?></p>
-                <a class="action-default" href="<?= $escaper->escapeUrl($block->getConnectUrl()) ?>"><?= $escaper->escapeHtml(__('Connect my account')) ?></a>
-            <?php endif; ?>
-        </fieldset>
+        <div class="admin__page-section">
+            <div class="admin__page-section-title">
+                <span class="title"><?= $escaper->escapeHtml(__('Your Connection')) ?></span>
+            </div>
+            <div class="admin__page-section-content">
+                <?php if ($block->isConnected()): ?>
+                    <p><?= $escaper->escapeHtml(__('Connected with your own account. Only you can use it.')) ?></p>
+                    <button type="button" class="action-default" onclick="window.location.href='<?= $escaper->escapeJs($block->getDisconnectUrl()) ?>'"><span><?= $escaper->escapeHtml(__('Disconnect my account')) ?></span></button>
+                <?php else: ?>
+                    <p><?= $escaper->escapeHtml(__('Not connected. You will be asked to log in at the server.')) ?></p>
+                    <button type="button" class="action-default" onclick="window.location.href='<?= $escaper->escapeJs($block->getConnectUrl()) ?>'"><span><?= $escaper->escapeHtml(__('Connect my account')) ?></span></button>
+                <?php endif; ?>
+            </div>
+        </div>
     <?php endif; ?>
 
-    <div class="admin__page-actions">
-        <a class="action-default" href="<?= $escaper->escapeUrl($block->getBackUrl()) ?>"><?= $escaper->escapeHtml(__('Back')) ?></a>
-        <button type="submit" class="action-primary"><?= $escaper->escapeHtml(__('Save')) ?></button>
+    <div class="admin__page-actions" style="margin-top: 20px;">
+        <button type="button" class="action-default" onclick="window.location.href='<?= $escaper->escapeJs($block->getBackUrl()) ?>'">
+            <span><?= $escaper->escapeHtml(__('Back')) ?></span>
+        </button>
+        <?php if ($row !== null && $manual): ?>
+            <button type="button" class="action-default" id="mago-mcp-delete">
+                <span><?= $escaper->escapeHtml(__('Delete Server')) ?></span>
+            </button>
+        <?php endif; ?>
+        <button type="submit" class="action-primary">
+            <span><?= $escaper->escapeHtml(__('Save Server')) ?></span>
+        </button>
     </div>
 </form>
+
 <?php if ($row !== null && $manual): ?>
-    <form method="post" action="<?= $escaper->escapeUrl($block->getDeleteUrl()) ?>"
-          onsubmit="return confirm('<?= $escaper->escapeJs(__('Delete this server, and every admin\'s connection to it?')) ?>');" class="mago-mcp-delete">
+    <form id="mago-mcp-delete-form" method="post" action="<?= $escaper->escapeUrl($block->getDeleteUrl()) ?>">
         <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
-        <input type="hidden" name="name" value="<?= $escaper->escapeHtmlAttr((string)$row['name']) ?>"/>
-        <button type="submit" class="action-tertiary"><?= $escaper->escapeHtml(__('Delete this server')) ?></button>
     </form>
+    <script type="text/x-magento-init">
+    {
+        "#mago-mcp-delete": {
+            "Magento_Ui/js/modal/confirm": {
+                "title": "<?= $escaper->escapeJs(__('Delete MCP Server')) ?>",
+                "content": "<?= $escaper->escapeJs(__('Delete this server, and every admin\'s connection to it?')) ?>",
+                "actions": {"confirm": function () { document.getElementById('mago-mcp-delete-form').submit(); }}
+            }
+        }
+    }
+    </script>
 <?php endif; ?>
-<style>.mago-mcp-form .admin__field { margin-bottom: 1.5rem; } .mago-mcp-delete { margin-top: 2rem; }</style>
