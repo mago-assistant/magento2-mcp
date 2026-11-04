@@ -31,6 +31,10 @@ need new grants.
   edit page shows the scanned tools as a grid of checkboxes in three groups (reads, writes, execution
   and credential tools), each with its type, the Magento resource it needs, its description and a link
   to its Skills & Permissions page, followed by the trust settings and the actions.
+- **The grid card has its rounded top on the Mage-OS admin theme.** That theme draws a listing as one white
+  card whose rounded top and top padding belong to the toolbar's filter row; the servers listing and
+  Mago's skills listing have no toolbar, so their tables started flush against a square edge. A module
+  stylesheet gives both pages the card's top back.
 - **Execution and credential tools are withheld until the tool list ticks them.** An empty list now
   means every tool except those; they stay listed (grid count, `mago:mcp:list` says `withheld`) but are
   not skills for anyone. A discovered and enabled Bricklayer or magerun therefore exposes its lookups
