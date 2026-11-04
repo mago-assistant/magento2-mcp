@@ -18,9 +18,18 @@ need new grants.
   SQL or commands"), which `MCP Tools - Write` no longer includes, and are always irreversible writes:
   the card asks for the acknowledgement and names the risk. Roles that used the code runner through
   `use_write` need `execute` now.
-- **The read-only declaration no longer reaches an execution tool** or a tool the server annotates
-  `readOnlyHint: false` / `destructiveHint: true`. Before, declaring Bricklayer read-only made
-  `code-runner` and `batch-execute` cardless reads under the read grant.
+- **Read-only means only read tools, and every server starts read-only.** The flag no longer lifts the
+  confirmation card from unrecognised names; it withholds every tool that is not a read, whatever the
+  allowed-tool list says, and a new row, discovered or added by hand, has it on. On the edit page the
+  write and execution boxes are greyed out until it is unticked, so a write is exposed only by someone
+  unticking read-only and then ticking that write. Before, declaring Bricklayer read-only made
+  `code-runner` and `batch-execute` cardless reads under the read grant. Existing rows keep their flag;
+  a lookup server such as context7 whose names the classifier does not know shows the card until
+  read-only is unticked. `ServerDefinition` and `DiscoveredServer` default `readOnly` to true.
+- **Public output is the Privacy filter**, on by default: the edit page shows "Privacy filter" (on hides
+  personal details before a result goes to the AI; off sends it as the server returned it), and the row
+  keeps storing the inverse as `output_public`, so nothing changes for stored rows, module definitions
+  or `.mcp.json`.
 - **`MagoAssistant_Mcp::manage` moved** from under Stores > Configuration to the assistant's own grants in
   the role tree, beside use/use_write/execute. Existing explicit grants keep working.
 - **Allowed tools is a trust setting on every row**, discovered rows included, and a rescan keeps it.
@@ -52,14 +61,14 @@ need new grants.
   they deal in credentials (`env`, `secret`, `password`, `token`, `key`, `decrypt`, ...) are writes for
   the card alone and never cardless reads; `schedule` is a write word. A CLI-style argument asking a
   server to decrypt or reveal secrets (`--decrypt`, `--show-secrets`, `--password`) is refused.
-- **The read-only declaration lifts only the classifier's fail-closed caution**: a name that carries a
-  write word (`delete`, `cancel`, `kill`, `schedule`) stays a write on a read-only server. Before, every
+- **The read-only flag never relabels a tool**: a name that carries a write word (`delete`, `cancel`,
+  `kill`, `schedule`) or that the classifier does not know is a write on any server. Before, every
   tool of a read-only server was a read.
 - **Diagnostics need the System resource**: `db`, `database`, `env`, `log`, `report` map to
   `Magento_Backend::system` in `DataAcl`.
 - **A rescan that changes a server's connection withdraws the admin's approval.** When the source yields
   a different source, transport, command, environment, working directory, URL or auth type under a known
-  name, the row goes back to disabled with read-only and public output cleared and the reason in its
+  name, the row goes back to disabled and read-only, with the privacy filter on, and the reason in its
   status, until an admin has seen the new details. Before, a package that took an `.mcp.json` server's
   name inherited its enabled and trust flags.
 - **A server the last scan did not find is not exposed** while flagged Missing; its enabled flag is kept

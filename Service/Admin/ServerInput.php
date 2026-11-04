@@ -86,7 +86,8 @@ final class ServerInput
     /**
      * The settings an administrator owns on any row, whatever its source: the trust flags and the list of
      * tools the server may expose at all, so a discovered server's code runner can be kept out of the
-     * catalog without disabling the server or touching every admin's permissions.
+     * catalog without disabling the server or touching every admin's permissions. The form shows the
+     * privacy filter, ticked by default; the row stores its inverse, output_public.
      *
      * @param array<string,mixed> $post
      * @return array{read_only: bool, output_public: bool, allowed_tools: string[]}
@@ -95,7 +96,7 @@ final class ServerInput
     {
         return [
             'read_only' => self::checked($post, 'read_only'),
-            'output_public' => self::checked($post, 'output_public'),
+            'output_public' => !self::checked($post, 'privacy_filter'),
             'allowed_tools' => self::names($post['allowed_tools'] ?? ''),
         ];
     }

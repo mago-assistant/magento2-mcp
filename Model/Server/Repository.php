@@ -72,7 +72,7 @@ class Repository implements ServerRepositoryInterface
             'replaces_skill' => isset($row['replaces_skill']) && $row['replaces_skill'] !== ''
                 ? (string)$row['replaces_skill']
                 : null,
-            'read_only' => (int)(bool)($row['read_only'] ?? false),
+            'read_only' => (int)(bool)($row['read_only'] ?? true),
             'source' => $row['source'] ?? DiscoveredServer::SOURCE_MANUAL,
             'enabled' => (int)(bool)($row['enabled'] ?? false),
             'missing' => (int)(bool)($row['missing'] ?? false),

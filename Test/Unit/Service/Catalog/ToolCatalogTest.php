@@ -365,25 +365,40 @@ final class ToolCatalogTest extends TestCase
     }
 
     #[Test]
-    public function aReadOnlyServerMakesEveryNameClassifiedToolARead(): void
+    public function aReadOnlyServerExposesOnlyItsReadTools(): void
     {
         $this->servers->add('demo', true, 'composer', ['read_only' => true]);
 
         $entries = $this->catalog()->entries();
         $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
 
-        foreach (['product-list', 'customer-get', 'weather'] as $tool) {
-            self::assertSame(ModeClassifier::READ, $byTool[$tool]->mode, $tool . ' is a read on a read-only server');
-            self::assertSame(CatalogEntry::ORIGIN_SERVER, $byTool[$tool]->modeOrigin);
-            self::assertFalse($byTool[$tool]->irreversible, $tool . ' is never irreversible as a read');
+        foreach (['product-list', 'customer-get'] as $tool) {
+            self::assertSame(ModeClassifier::READ, $byTool[$tool]->mode);
+            self::assertFalse($byTool[$tool]->withheld, $tool . ' is a read, so it is exposed on a read-only server');
         }
-        self::assertSame(ModeClassifier::WRITE, $byTool['product-delete']->mode, 'a name carrying a write word keeps it on any server');
-        self::assertSame(CatalogEntry::ORIGIN_CLASSIFIER, $byTool['product-delete']->modeOrigin);
+        self::assertSame(ModeClassifier::WRITE, $byTool['weather']->mode, 'an unrecognised name is a write, fail-closed');
+        self::assertSame(CatalogEntry::ORIGIN_CLASSIFIER, $byTool['weather']->modeOrigin);
+        self::assertTrue($byTool['weather']->withheld, 'and so is not exposed while the server is read-only');
+        self::assertTrue($byTool['product-delete']->withheld, 'a write is withheld on a read-only server');
+        self::assertSame(ModeClassifier::WRITE, $byTool['product-delete']->mode, 'its mode is unchanged: the flag withholds, it does not relabel');
+
+        $this->servers->rows['demo']['allowed_tools'] = ['product-list', 'product-delete'];
+        $this->catalog()->refresh('demo');
+        $entries = $this->catalog()->entries();
+        $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
+        self::assertTrue($byTool['product-delete']->withheld, 'naming a write in the list does not bring it back while read-only');
+        self::assertFalse($byTool['product-list']->withheld);
+
+        $this->servers->rows['demo']['read_only'] = false;
+        $this->catalog()->refresh('demo');
+        $entries = $this->catalog()->entries();
+        $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
+        self::assertFalse($byTool['product-delete']->withheld, 'read-only unticked and the write ticked: exposed, behind the card');
         self::assertTrue($byTool['product-delete']->irreversible);
     }
 
     #[Test]
-    public function aReadOnlyServerLeavesCronAndCredentialToolsBehindTheCard(): void
+    public function aReadOnlyServerWithholdsCronCredentialAndUnknownNames(): void
     {
         $this->transport->tools['demo'] = [
             ['name' => 'sys_cron_schedule', 'description' => '', 'inputSchema' => ['type' => 'object']],
@@ -398,10 +413,13 @@ final class ToolCatalogTest extends TestCase
 
         self::assertSame(ModeClassifier::WRITE, $byTool['sys_cron_schedule']->mode, '"schedule" is a write word');
         self::assertSame(ModeClassifier::WRITE, $byTool['sys_cron_kill']->mode, '"kill" is a write word');
-        self::assertSame(ModeClassifier::WRITE, $byTool['config_env_show']->mode, 'a credential tool is never a cardless read');
+        self::assertSame(ModeClassifier::WRITE, $byTool['config_env_show']->mode, 'a credential tool is never a read');
         self::assertSame(CatalogEntry::ORIGIN_SENSITIVE, $byTool['config_env_show']->modeOrigin);
-        self::assertSame(ModeClassifier::READ, $byTool['resolve-library-id']->mode, 'the unknown name the declaration is for');
-        self::assertSame(CatalogEntry::ORIGIN_SERVER, $byTool['resolve-library-id']->modeOrigin);
+        self::assertSame(ModeClassifier::WRITE, $byTool['resolve-library-id']->mode, 'an unrecognised name is a write');
+        self::assertSame(CatalogEntry::ORIGIN_CLASSIFIER, $byTool['resolve-library-id']->modeOrigin);
+        foreach (array_keys($byTool) as $tool) {
+            self::assertTrue($byTool[$tool]->withheld, $tool . ' is not exposed on a read-only server');
+        }
     }
 
     #[Test]
@@ -450,10 +468,11 @@ final class ToolCatalogTest extends TestCase
         $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
 
         foreach (['code-runner', 'batch-execute', 'database-query'] as $tool) {
-            self::assertSame(ModeClassifier::WRITE, $byTool[$tool]->mode, $tool . ' runs code or SQL: the declaration does not reach it');
+            self::assertSame(ModeClassifier::WRITE, $byTool[$tool]->mode, $tool . ' runs code or SQL: the flag does not reach it');
             self::assertSame(CatalogEntry::ORIGIN_EXECUTION, $byTool[$tool]->modeOrigin);
             self::assertTrue($byTool[$tool]->irreversible, $tool . ' needs the acknowledgement on the card');
             self::assertTrue($byTool[$tool]->executionSurface);
+            self::assertTrue($byTool[$tool]->withheld, $tool . ' is withheld on a read-only server');
         }
         self::assertFalse($byTool['product-list']->executionSurface);
     }
@@ -469,6 +488,7 @@ final class ToolCatalogTest extends TestCase
         self::assertSame(ModeClassifier::WRITE, $byTool['stock-get']->mode, 'readOnlyHint false / destructiveHint true count on a read-only server too');
         self::assertSame(CatalogEntry::ORIGIN_ANNOTATION, $byTool['stock-get']->modeOrigin);
         self::assertTrue($byTool['stock-get']->irreversible);
+        self::assertTrue($byTool['stock-get']->withheld, 'a read name the server calls destructive is withheld on a read-only server');
     }
 
     #[Test]

@@ -102,8 +102,8 @@ final class ServerMergerTest extends TestCase
 
         self::assertSame(['php', 'vendor/bin/other-mcp'], $row['command'], 'the source still owns the connection');
         self::assertFalse($row['enabled'], 'but what the admin approved was another command: back to disabled');
-        self::assertFalse($row['read_only']);
-        self::assertFalse($row['output_public']);
+        self::assertTrue($row['read_only'], 'and read-only again');
+        self::assertFalse($row['output_public'], 'with the privacy filter on');
         self::assertStringContainsString('source, command', (string)$row['last_error']);
 
         $sameAgain = new DiscoveredServer('tools', ['php', 'bin/tools-mcp'], [], null, DiscoveredServer::SOURCE_MCP_JSON);

@@ -61,13 +61,13 @@ copy of the same name is logged and dropped. A `manual` row is never touched by 
 
 Discovery never enables anything by itself. It only makes a server visible so an administrator can
 turn it on. The source owns a discovered row's connection details; the administrator owns every row's
-**trust settings**: enabled, read-only, public output and the allowed-tool list. A rescan re-applies the
+**trust settings**: enabled, read-only, the privacy filter and the allowed-tool list. A rescan re-applies the
 connection details from the source and keeps the trust settings (and a stored bearer token when the
 source supplies none); a source's values for the trust settings count only when the row is first
 inserted. One exception: the approval was given to a particular command or URL. When a rescan finds a
 different source, transport, command, environment, working directory, URL or auth type under a known
 name (a package update, an edited `.mcp.json`, a package that took the name of an `.mcp.json` entry),
-the row goes back to disabled with read-only and public output cleared and the reason in its status,
+the row goes back to disabled and read-only, with the privacy filter on, and the reason in its status,
 until an admin has looked at the new details and enabled it again. A server a source no longer yields, a
 removed package, a disabled module, `.mcp.json` scanning switched off, is flagged Missing in the grid
 and in `mago:mcp:discover` and is not exposed to the assistant while it is; its enabled flag is kept
@@ -90,11 +90,13 @@ connection; Add Server, Rescan and Refresh Tool Lists are the toolbar buttons.
 of checkboxes in three groups, reads, writes, and execution and credential tools. A ticked tool is
 exposed as a skill; an unticked one is not a skill for anyone. Each row shows the tool's type, the
 Magento resource a role needs for it, its first sentence, and a link to its Skills & Permissions page.
-The dangerous group starts unticked. Below the tools come the trust settings: **read-only** (tools with
-an unrecognised name run without the confirmation card) and **public output** (off: personal details
-such as emails and phone numbers are hidden before a result goes to the AI; on: the AI sees the result
-as the server sent it, so only for a server whose answers contain no people). On an OAuth server your
-own connection follows; the actions are at the bottom, as on Mago's pages.
+Below the tools come the trust settings. **Read-only server**, on for every new server: only the tools
+under Reads are exposed, and the write and execution boxes are greyed out until it is unticked, so a
+write is exposed only by someone unticking read-only and then ticking that write. **Privacy filter**,
+also on for every new server: personal details such as emails and phone numbers are hidden before a
+result goes to the AI; off, the AI sees the result as the server sent it, which is only for a server
+whose answers contain no people. On an OAuth server your own connection follows; the actions are at
+the bottom, as on Mago's pages.
 
 **Add server** opens the same page for a remote server with a connection section: label, URL,
 authentication, bearer token, timeout, the skill it replaces, enabled. The name is derived from the label
@@ -119,7 +121,8 @@ admin user, read or write or disabled, falling back to the role's grants (`MCP T
 
 So untick a tool on the server page when nobody should ever have it, and use Skills & Permissions when
 the tool should exist but only for some people. The Permissions link on each tool row takes you from the
-first page to the second. Execution and credential tools start unticked.
+first page to the second. Every server starts read-only, so only its read tools have doors; the writes
+and the execution and credential tools get one only after read-only is unticked and they are ticked.
 
 From the CLI:
 
@@ -242,14 +245,15 @@ for anyone, whatever grants they hold. It is one of the administrator's trust se
 discovered or manual (the **Tools** checkboxes on the edit page), and a rescan keeps it; the source's
 list counts when the row is first inserted.
 
-**Empty means every tool except the dangerous ones.** A tool that runs code, SQL or commands or deals
-in credentials (the execution and credential words under "Read or write") is *withheld* until the list
-names it: listed in the grid's count and in `mago:mcp:list` as `withheld`, never a skill. So a server
-that is discovered and enabled, Bricklayer or magerun, exposes its lookups and its ordinary writes and
-nothing else; to use `code-runner`, write every tool you want, that one included, into the list. An
-explicit list is exact: nothing outside it is exposed. The list also saves tokens: every exposed tool's
-definition is sent to the model on every turn, so a server with sixty tools you use three of is worth
-trimming. Who may call an exposed tool is still Mago's ACL and per-user table.
+**Empty means every tool except the dangerous ones**, and on a read-only server only the reads. A tool
+that runs code, SQL or commands or deals in credentials (the execution and credential words under "Read
+or write") is *withheld* until the list names it: listed in the grid's count and in `mago:mcp:list` as
+`withheld`, never a skill. The read-only flag withholds every tool that is not a read, listed or not. So
+a server that is discovered and enabled, Bricklayer or magerun, exposes its lookups and nothing else;
+to use `product-update`, untick read-only and tick it; to use `code-runner`, the same, and the row must
+also name it. An explicit list is exact: nothing outside it is exposed. The list also saves tokens:
+every exposed tool's definition is sent to the model on every turn, so a server with sixty tools you
+use three of is worth trimming. Who may call an exposed tool is still Mago's ACL and per-user table.
 
 ## How a tool reaches the model
 
@@ -279,33 +283,21 @@ the tool name (`Getting order...`) as the status line.
 
 ## Read-only servers
 
-In plain terms: a tool whose name does not say whether it reads or changes something is treated as a
-change and shows the confirmation card; on a read-only server such a tool runs at once. Tools that
-clearly change something, run code or deal in credentials keep their card either way.
+In plain terms: a read-only server exposes only its read tools. Every server starts that way, whether a
+source discovered it or an administrator added it, and stays that way until an administrator unticks
+**Read-only server** on its edit page and ticks the writes they want.
 
-An administrator can declare a server **read-only** on its edit page. Every tool of that server whose
-name the classifier below would have judged is then a `read` (shown as `read (server)` in
-`mago:mcp:list`), runs without the confirmation card, and is never flagged irreversible. Use it for a
-server whose tools cannot change anything, such as a documentation lookup; the classifier is
-deliberately cautious and would otherwise send names like `resolve-library-id` or `query-docs` through
-the card. A module definition can set `readOnly` as the starting value.
+While the flag is on, every tool whose mode is not `read` is withheld: listed in the grid's count and
+in `mago:mcp:list` as `withheld`, never a skill, whatever the allowed-tool list says. That covers a
+name carrying a write word (`delete`, `cancel`, `kill`, `schedule`, ...), an execution tool, a
+credential tool, a tool the server itself annotates `readOnlyHint: false` or `destructiveHint: true`,
+and a name the classifier does not recognise, which is a write fail-closed (`resolve-library-id`,
+`query-docs`). The flag never changes a tool's mode: a write stays a write behind the card once it is
+exposed, and a read runs without the card on any server.
 
-The declaration lifts one thing only: the classifier's fail-closed caution about a name it does not
-recognise (`resolve-library-id`, `query-docs`). It never reaches:
-
-- a name that carries a **write word** (`delete`, `cancel`, `kill`, `schedule`, ...): a delete is a
-  delete on any server;
-- an **execution tool** (a name carrying `exec`, `execute`, `run`, `runner`, `script`, `sql`, `php`,
-  `shell`, `batch`, `database`, `db` and the rest of the list under "Read or write"): that stays an
-  irreversible write under its own `MCP Tools - Execute` grant, because what runs is whatever the
-  arguments say;
-- a **credential tool** (a name carrying `env`, `secret`, `password`, `token`, `key`, `decrypt`, ...):
-  a write for the card alone, never a cardless read;
-- a tool the server itself annotates `readOnlyHint: false` or `destructiveHint: true`: a server that
-  says one of its tools is destructive is believed, declared read-only or not.
-
-So a read-only declaration on a server such as Bricklayer makes its lookups cardless and leaves
-`code-runner`, `batch-execute`, `database-query` and `customer-delete` exactly where they were.
+So a lookup server whose names the classifier does not know, context7 for instance, exposes nothing
+until read-only is unticked, after which its tools run as writes with the confirmation card. A module
+definition that ships such a server sets `readOnly: false` and lists its tools.
 
 ## Read or write
 
@@ -354,8 +346,8 @@ A tool whose name says it runs code, SQL or commands, or touches the database di
 `execute`, `eval`, `evaluate`, `run`, `runner`, `script`, `shell`, `bash`, `terminal`, `console`, `cli`,
 `command`, `php`, `sql`, `unsafe`, `generate`, `scaffold`, `reinitialize`, `install`, `uninstall`,
 `upgrade`, `migrate`, `batch`, `database`, `db`) is an **execution tool**: always an irreversible write
-(`write (execution)` in `mago:mcp:list`), whatever the server's annotations or the read-only
-declaration say, carrying ` [runs code, SQL or commands]` on its description. A tool whose name says it
+(`write (execution)` in `mago:mcp:list`), whatever the server's annotations say, carrying
+` [runs code, SQL or commands]` on its description. A tool whose name says it
 deals in credentials (`env`, `credential`, `secret`, `password`, `token`, `key`, `dsn`, `decrypt`, and
 plurals) is a write for the card alone (`write (sensitive)`), never a cardless read. Tools that return
 personal data by their name (`customer`, `order`, `invoice`, `shipment`, `creditmemo`, `address`,
@@ -417,17 +409,18 @@ arguments say. Grant both to few roles.
 
 ## Results and privacy
 
-A tool's result reaches the model in one of two shapes, chosen by the server row's **output public**
-flag, one of the trust settings an administrator sets on the edit page (a module definition can set its
-starting value with `outputPublic`). In plain terms: off hides personal details before the result goes
-to the AI, on sends the result as the server returned it. Credentials are masked on both settings.
+A tool's result reaches the model in one of two shapes, chosen by the **Privacy filter** on the edit
+page, one of the trust settings an administrator sets. The row stores its inverse as `output_public`,
+and a module definition sets the starting value with `outputPublic`. In plain terms: the filter on
+hides personal details before the result goes to the AI, off sends the result as the server returned
+it. Credentials are masked either way.
 
-- **Not public** (the default, and the right setting for a local server that returns customer data):
+- **Filter on** (the default, and the right setting for a local server that returns customer data):
   the result is one text string, declared public so Mago's heuristic scrub and vault concealment run
   over the whole of it. Structured content with no text is JSON-encoded into that string. The heuristic
   catches emails, phone numbers and values the vault already knows; names and street addresses embedded
   in prose are not reliably caught.
-- **Public**: the result crosses as data. The server's `structuredContent`, or a single text block that
+- **Filter off** (`output_public`): the result crosses as data. The server's `structuredContent`, or a single text block that
   is JSON of an object or list, goes to the model as it is under a wildcard-public classification, or
   under the tool's own override from a module definition (the example above strips `email` from one
   tool's output while the rest is public). An override replaces the wildcard rule, so it must carry its
@@ -448,9 +441,9 @@ An execution tool, a code runner, a raw SQL tool, a batch runner, is arbitrary P
 the store as the web server user, one confirmation away. It is therefore withheld by default: not a
 skill until the server's **Allowed tools** names it. Once named, it has its own grant,
 `MCP Tools - Execute`, which `MCP Tools - Write` does not include; it is always an irreversible write,
-so the card asks for the acknowledgement and names the risk; and the read-only declaration never
-reaches it. Grant `execute` to the few roles that deploy code. Credential tools (`env`, `secret`,
-`password`, ... in the name) are withheld the same way.
+so the card asks for the acknowledgement and names the risk. Grant `execute` to the few roles that
+deploy code. Credential tools (`env`, `secret`, `password`, ... in the name) are withheld the same way,
+and every server starts read-only, which withholds every write until an administrator decides otherwise.
 
 What an MCP tool returns is gated by the Magento resource its name points at ("Which grants a call
 needs" above), so the assistant cannot read customers, orders or configuration for an admin who may not

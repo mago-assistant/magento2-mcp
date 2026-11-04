@@ -40,7 +40,7 @@ final class ServerDefinition
         public readonly string $replacesSkill = '',
         public readonly array $fieldClassificationOverrides = [],
         public readonly array $errorHints = [],
-        public readonly bool $readOnly = false
+        public readonly bool $readOnly = true
     ) {
         $this->name = DiscoveredServer::normaliseName($name);
         $this->transport = $transport !== ''

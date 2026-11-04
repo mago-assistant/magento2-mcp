@@ -173,7 +173,7 @@ $badgeClass = ['read' => 'is-ok', 'write' => 'is-warn', 'execution' => 'is-dange
                                 <div class="admin__field-option">
                                     <input type="checkbox" class="admin__control-checkbox" name="allowed_tools[]"
                                            id="mago-mcp-tool-<?= $escaper->escapeHtmlAttr($tool['skill']) ?>"
-                                           value="<?= $escaper->escapeHtmlAttr($tool['tool']) ?>"<?= $tool['exposed'] ? ' checked' : '' ?>/>
+                                           value="<?= $escaper->escapeHtmlAttr($tool['tool']) ?>"<?= $tool['exposed'] ? ' checked' : '' ?><?= $tool['locked'] ? ' disabled' : '' ?><?= $tool['group'] !== 'read' ? ' data-mago-mcp-writable="1"' : '' ?>/>
                                     <label class="admin__field-label" for="mago-mcp-tool-<?= $escaper->escapeHtmlAttr($tool['skill']) ?>"><span></span></label>
                                 </div>
                             </td>
@@ -214,22 +214,29 @@ $badgeClass = ['read' => 'is-ok', 'write' => 'is-warn', 'execution' => 'is-dange
                 <div class="admin__field">
                     <div class="admin__field-control">
                         <div class="admin__field-option">
-                            <input id="mago-mcp-read-only" name="read_only" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isChecked('read_only') ? ' checked' : '' ?>/>
+                            <input id="mago-mcp-read-only" name="read_only" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isReadOnly() ? ' checked' : '' ?>/>
                             <label class="admin__field-label" for="mago-mcp-read-only"><span><?= $escaper->escapeHtml(__('Read-only server')) ?></span></label>
                         </div>
-                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('Off: a tool whose name does not say whether it reads or changes something is treated as a change, so it shows the confirmation card before it runs. On: such a tool runs at once, without the card. Turn it on only for a server that cannot change anything, such as a documentation lookup. Tools that clearly change something (delete, cancel, kill), run code or commands, or deal in credentials keep their card either way.')) ?></div>
+                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('On: only the tools under Reads are exposed; every write and execution tool stays unticked and greyed out above. Off: the write and execution tools can be ticked, one by one. Every server starts read-only. Untick it only once you have decided which changes this server may make to the store.')) ?></div>
                     </div>
                 </div>
                 <div class="admin__field">
                     <div class="admin__field-control">
                         <div class="admin__field-option">
-                            <input id="mago-mcp-public" name="output_public" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isChecked('output_public') ? ' checked' : '' ?>/>
-                            <label class="admin__field-label" for="mago-mcp-public"><span><?= $escaper->escapeHtml(__('Public output')) ?></span></label>
+                            <input id="mago-mcp-privacy" name="privacy_filter" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isPrivacyFilterOn() ? ' checked' : '' ?>/>
+                            <label class="admin__field-label" for="mago-mcp-privacy"><span><?= $escaper->escapeHtml(__('Privacy filter')) ?></span></label>
                         </div>
-                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('Off: before a result goes to the AI, Mago hides personal details in it, so an email or phone number becomes a placeholder. On: nothing is hidden and the AI sees the result exactly as the server sent it. Keep it off for a server that returns customer or order data; turn it on only for one whose answers contain no people, such as a documentation lookup. Passwords and keys are hidden on both settings.')) ?></div>
+                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('On: before a result goes to the AI, Mago hides personal details in it, so an email or phone number becomes a placeholder. Off: nothing is hidden and the AI sees the result exactly as the server sent it. Keep it on for a server that returns customer or order data; turn it off only for one whose answers contain no people, such as a documentation lookup. Passwords and keys are hidden either way.')) ?></div>
                     </div>
                 </div>
             </fieldset>
+            <script type="text/x-magento-init">
+            {
+                "#mago-mcp-read-only": {
+                    "MagoAssistant_Mcp/js/read-only-toggle": {}
+                }
+            }
+            </script>
         </div>
     </div>
 

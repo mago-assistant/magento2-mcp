@@ -200,7 +200,8 @@ class ToolCatalog
         // that run code, SQL or commands or deal in credentials: those are withheld until the list
         // names them, so a server that is discovered and enabled exposes nothing dangerous by default.
         $allowed = array_map('strval', is_array($row['allowed_tools'] ?? null) ? $row['allowed_tools'] : []);
-        // The administrator's declaration: every tool of this server is a read, whatever its name says.
+        // Read-only, the starting state of every row: only the read tools are exposed, and nothing the
+        // list names brings a write back. An administrator unticks it on the edit page to tick writes.
         $readOnly = (bool)($row['read_only'] ?? false);
         foreach ($this->fetched($row, $adminUserId)['tools'] as $tool) {
             $toolName = (string)$tool['name'];
@@ -209,8 +210,9 @@ class ToolCatalog
             }
             $annotations = is_array($tool['annotations'] ?? null) ? $tool['annotations'] : [];
             $execution = $this->classifier->isExecutionSurface($toolName);
-            $withheld = ($execution || $this->classifier->isSensitive($toolName)) && !in_array($toolName, $allowed, true);
-            [$mode, $origin] = $this->modeOf($toolName, $annotations, $readOnly, $execution);
+            [$mode, $origin] = $this->modeOf($toolName, $annotations, $execution);
+            $withheld = ($readOnly && $mode !== ModeClassifier::READ)
+                || (($execution || $this->classifier->isSensitive($toolName)) && !in_array($toolName, $allowed, true));
             // A read tool is never irreversible, whatever IRREVERSIBLE_WORDS or destructiveHint says. An
             // execution tool always is: the card then needs the acknowledgement, and "the assistant cannot
             // undo this" is literally true of code that already ran.
@@ -240,20 +242,18 @@ class ToolCatalog
 
     /**
      * Read or write, strictest voice first. A name that says it runs code, SQL or commands is a write
-     * for everyone: the administrator's read-only declaration overrides only the name classifier's
-     * caution, never the fact that a tool executes. Next, the server's own readOnlyHint false or
-     * destructiveHint true turn a read into a write, again whether or not the server is declared
-     * read-only (a server that says one of its tools is destructive is believed). Then the read-only
-     * declaration makes the rest of the server reads; otherwise the name decides. Nothing turns a write
-     * into a read except that declaration.
+     * for everyone, and so is a name that says it deals in credentials. Next, the server's own
+     * readOnlyHint false or destructiveHint true turn a read into a write (a server that says one of
+     * its tools is destructive is believed). Then the name decides, fail-closed: a name the classifier
+     * does not recognise is a write. Nothing turns a write into a read; the row's read-only flag does
+     * not change a mode, it withholds every tool that is not a read.
      *
      * @param string $tool
      * @param array<string,mixed> $annotations
-     * @param bool $readOnly the row's read_only flag
      * @param bool $execution the name is an execution surface
      * @return array{0:string,1:string} mode and where it came from
      */
-    private function modeOf(string $tool, array $annotations, bool $readOnly, bool $execution): array
+    private function modeOf(string $tool, array $annotations, bool $execution): array
     {
         if ($execution) {
             return [ModeClassifier::WRITE, CatalogEntry::ORIGIN_EXECUTION];
@@ -262,13 +262,8 @@ class ToolCatalog
             return [ModeClassifier::WRITE, CatalogEntry::ORIGIN_SENSITIVE];
         }
         $tightened = ($annotations['readOnlyHint'] ?? null) === false || ($annotations['destructiveHint'] ?? null) === true;
-        if ($tightened && ($readOnly || $this->classifier->classify($tool) === ModeClassifier::READ)) {
+        if ($tightened && $this->classifier->classify($tool) === ModeClassifier::READ) {
             return [ModeClassifier::WRITE, CatalogEntry::ORIGIN_ANNOTATION];
-        }
-        // The declaration lifts the classifier's fail-closed caution for an unknown name; a name that
-        // carries a write word (delete, cancel, kill, schedule) keeps it on any server.
-        if ($readOnly && !$this->classifier->hasWriteWord($tool)) {
-            return [ModeClassifier::READ, CatalogEntry::ORIGIN_SERVER];
         }
 
         return [$this->classifier->classify($tool), CatalogEntry::ORIGIN_CLASSIFIER];

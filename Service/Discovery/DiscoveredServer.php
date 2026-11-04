@@ -33,7 +33,7 @@ final class DiscoveredServer
         public readonly ?int $timeout = null,
         public readonly bool $outputPublic = false,
         public readonly string $replacesSkill = '',
-        public readonly bool $readOnly = false
+        public readonly bool $readOnly = true
     ) {
     }
 

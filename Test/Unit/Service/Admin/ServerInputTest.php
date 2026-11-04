@@ -36,7 +36,7 @@ final class ServerInputTest extends TestCase
         $result = ServerInput::validate(self::post([
             'allowed_tools' => " query-docs \n\n resolve-library-id\n",
             'timeout' => '30',
-            'output_public' => '1',
+            'privacy_filter' => '1',
             'read_only' => '1',
             'enabled' => '1',
             'replaces_skill' => 'docs',
@@ -52,7 +52,7 @@ final class ServerInputTest extends TestCase
         self::assertSame('https://mcp.example.com/mcp', $row['url']);
         self::assertSame(['query-docs', 'resolve-library-id'], $row['allowed_tools']);
         self::assertSame(30, $row['timeout']);
-        self::assertTrue($row['output_public']);
+        self::assertFalse($row['output_public'], 'the privacy filter box ticked is output_public off');
         self::assertTrue($row['read_only']);
         self::assertTrue($row['enabled']);
         self::assertSame('docs', $row['replaces_skill']);
@@ -60,11 +60,11 @@ final class ServerInputTest extends TestCase
     }
 
     #[Test]
-    public function uncheckedBoxesAreFalse(): void
+    public function uncheckedBoxesAreOff(): void
     {
         $row = ServerInput::validate(self::post(), null)['row'];
 
-        self::assertFalse($row['output_public']);
+        self::assertTrue($row['output_public'], 'the privacy filter box unticked is output_public on');
         self::assertFalse($row['read_only']);
         self::assertFalse($row['enabled']);
         self::assertNull($row['timeout']);
@@ -148,11 +148,12 @@ final class ServerInputTest extends TestCase
         ]);
 
         self::assertSame(
-            ['read_only' => true, 'output_public' => false, 'allowed_tools' => ['product-list', 'order-get']],
+            ['read_only' => true, 'output_public' => true, 'allowed_tools' => ['product-list', 'order-get']],
             $result,
             'the allowed-tool list is a trust setting: it keeps a discovered server\'s code runner out of the catalog'
         );
         self::assertSame([], ServerInput::validateTrust([])['allowed_tools'], 'absent means every tool but the withheld ones');
+        self::assertFalse(ServerInput::validateTrust(['privacy_filter' => '1'])['output_public'], 'the form posts the filter; the row stores its inverse');
     }
 
     #[Test]

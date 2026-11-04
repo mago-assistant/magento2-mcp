@@ -77,7 +77,7 @@ class ListServers extends Command
             '<info>%s</info> — %s%s',
             OutputFormatter::escape($row['label'] !== '' ? (string)$row['label'] : (string)$row['name']),
             OutputFormatter::escape($row['transport'] === 'http' ? (string)$row['url'] : implode(' ', $row['command'])),
-            $row['read_only'] ? ' (read-only server)' : ''
+            $row['read_only'] ? ' (read-only: only read tools exposed)' : ''
         ));
         foreach ($this->catalog->entriesForServer((string)$name) as $entry) {
             $output->writeln(sprintf(
@@ -88,7 +88,7 @@ class ListServers extends Command
                 $entry->irreversible ? ' irreversible' : '',
                 $entry->personalData ? ' personal-data' : '',
                 $this->classifier->isExecutionSurface($entry->tool) ? ' execution' : '',
-                $entry->withheld ? ' <comment>withheld: name it under Allowed tools to expose</comment>' : ''
+                $entry->withheld ? ' <comment>withheld: not exposed (read-only server, or not ticked under Tools)</comment>' : ''
             ));
         }
 

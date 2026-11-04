@@ -14,9 +14,9 @@
         <column xsi:type="text" name="bearer_token" nullable="true" comment="Encrypted bearer token"/>
         <column xsi:type="text" name="allowed_tools" nullable="true" comment="JSON list of tool names; empty allows all"/>
         <column xsi:type="smallint" name="timeout" unsigned="true" nullable="true" identity="false" comment="Seconds per call; null uses the global default"/>
-        <column xsi:type="smallint" name="output_public" unsigned="true" nullable="false" identity="false" default="0" comment="Result may cross to the AI provider as public data"/>
+        <column xsi:type="smallint" name="output_public" unsigned="true" nullable="false" identity="false" default="0" comment="Privacy filter off: a result may cross to the AI provider as public data"/>
         <column xsi:type="varchar" name="replaces_skill" nullable="true" length="64" comment="Mago skill hidden for admins offered this server"/>
-        <column xsi:type="smallint" name="read_only" unsigned="true" nullable="false" identity="false" default="0" comment="Every tool is a read; no confirmation card"/>
+        <column xsi:type="smallint" name="read_only" unsigned="true" nullable="false" identity="false" default="1" comment="Only the read tools are exposed (the starting state of every row)"/>
         <column xsi:type="varchar" name="source" nullable="false" length="16" default="manual" comment="composer, mcp_json, module or manual"/>
         <column xsi:type="smallint" name="enabled" unsigned="true" nullable="false" identity="false" default="0" comment="Exposed to the assistant"/>
         <column xsi:type="smallint" name="missing" unsigned="true" nullable="false" identity="false" default="0" comment="Last scan did not find it"/>

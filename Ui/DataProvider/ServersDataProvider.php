@@ -113,7 +113,7 @@ class ServersDataProvider extends DataProvider
             $parts[] = (string)__('Read-only');
         }
         if ($row['output_public']) {
-            $parts[] = (string)__('Public output');
+            $parts[] = (string)__('Privacy filter off');
         }
         if ($row['missing']) {
             $parts[] = (string)__('Missing: not exposed until a rescan finds it');

@@ -113,10 +113,11 @@ class ServerForm extends Template
     /**
      * The scanned tools, one row each, grouped for the template: reads, then writes, then the execution
      * and credential tools, each with whether it is currently exposed and the Magento resource it needs.
-     * Empty for a new server or one whose list could not be fetched (see getToolsError()).
+     * Empty for a new server or one whose list could not be fetched (see getToolsError()). On a read-only
+     * server every row outside the reads is locked: unticked and not for ticking until the flag is off.
      *
-     * Keys: tool, skill, group (read, write or execution), type, mode_origin, exposed, withheld_by_default,
-     * resource, description, personal_data, permissions_url.
+     * Keys: tool, skill, group (read, write or execution), type, mode_origin, exposed, locked,
+     * withheld_by_default, resource, description, personal_data, permissions_url.
      *
      * @return array<int,array<string,mixed>>
      */
@@ -131,16 +132,19 @@ class ServerForm extends Template
         }
         $allowed = $this->allowedNames();
         $explicit = $allowed !== null;
+        $readOnly = $this->isReadOnly();
         $rows = [];
         foreach ($this->catalog->entriesForServer((string)$row['name'], $this->connectionState->currentAdminId()) as $entry) {
             $dangerous = $entry->executionSurface || $entry->modeOrigin === CatalogEntry::ORIGIN_SENSITIVE;
+            $locked = $readOnly && $entry->mode !== ModeClassifier::READ;
             $rows[] = [
                 'tool' => $entry->tool,
                 'skill' => McpSkill::nameFor($entry->server, $entry->tool),
                 'group' => $dangerous ? 'execution' : $entry->mode,
                 'type' => $entry->mode,
                 'mode_origin' => $entry->modeOrigin,
-                'exposed' => $explicit ? in_array($entry->tool, $allowed, true) : !$entry->withheld,
+                'exposed' => !$locked && ($explicit ? in_array($entry->tool, $allowed, true) : !$entry->withheld),
+                'locked' => $locked,
                 'withheld_by_default' => $dangerous,
                 'resource' => $this->dataAcl->resourceFor($entry->tool),
                 'description' => $this->firstSentence($entry->description),
@@ -166,11 +170,11 @@ class ServerForm extends Template
             ],
             ModeClassifier::WRITE => [
                 'title' => (string)__('Writes'),
-                'note' => (string)__('Go through the confirmation card before they run.'),
+                'note' => (string)__('Go through the confirmation card before they run. Available for ticking once Read-only server is unticked below.'),
             ],
             'execution' => [
                 'title' => (string)__('Execution and credential tools'),
-                'note' => (string)__('Run code, SQL or commands on the store, or deal in credentials. Withheld until ticked here; once ticked, only roles holding MCP Tools - Execute get them, behind an acknowledged card.'),
+                'note' => (string)__('Run code, SQL or commands on the store, or deal in credentials. Withheld until ticked here with Read-only server unticked; once ticked, only roles holding MCP Tools - Execute get them, behind an acknowledged card.'),
             ],
         ];
     }
@@ -187,6 +191,43 @@ class ServerForm extends Template
         $error = (string)($row['last_error'] ?? '');
 
         return $error !== '' ? $error : (string)__('The server returned no tools.');
+    }
+
+    /**
+     * Read-only: only the read tools are exposed. On for a new server, as it is for every row a source
+     * inserts, until an administrator unticks it.
+     */
+    public function isReadOnly(): bool
+    {
+        if ($this->isNew() && !$this->hasFormData()) {
+            return true;
+        }
+
+        return $this->isChecked('read_only');
+    }
+
+    /**
+     * The privacy filter hides personal details in a result before it reaches the model. The row stores
+     * the inverse, output_public, so the box is ticked when that flag is off; on for a new server.
+     */
+    public function isPrivacyFilterOn(): bool
+    {
+        if ($this->hasFormData()) {
+            return $this->isChecked('privacy_filter');
+        }
+        $row = $this->getRow();
+
+        return $row === null || !(bool)($row['output_public'] ?? false);
+    }
+
+    /**
+     * Whether a failed save sent the form back (its input then stands in for the stored values).
+     */
+    private function hasFormData(): bool
+    {
+        $this->getValue('');
+
+        return $this->formData !== [];
     }
 
     public function countExposed(): int

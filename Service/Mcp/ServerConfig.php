@@ -27,11 +27,11 @@ final class ServerConfig
      * @param string $bearerToken Decrypted token (http, AUTH_BEARER)
      * @param string[] $allowedTools Tool names the assistant may use; [] allows every tool listed
      * @param int $timeout Seconds per call, both transports
-     * @param bool $outputPublic Whether a result may cross to the AI provider as declared-public data
+     * @param bool $outputPublic Privacy filter off: a result may cross to the AI provider as declared-public data
      * @param string $replacesSkill Mago skill hidden for admins offered this server, or ''
      * @param array<string,array<string,array{0:string,1?:string}>> $fieldClassificationOverrides per tool
      * @param array<string,string> $errorHints error fragment => hint appended to that error
-     * @param bool $readOnly The administrator declares every tool a read: no confirmation card
+     * @param bool $readOnly Only the read tools are exposed (every row starts so)
      */
     public function __construct(
         public readonly string $name,

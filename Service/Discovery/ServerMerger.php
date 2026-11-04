@@ -37,19 +37,20 @@ class ServerMerger
     {
         $kept = [
             'enabled' => (bool)($existing['enabled'] ?? false),
-            'read_only' => (bool)($existing['read_only'] ?? false),
+            'read_only' => (bool)($existing['read_only'] ?? true),
             'output_public' => (bool)($existing['output_public'] ?? false),
             'missing' => false,
             'last_error' => $existing['last_error'] ?? null,
         ];
         // The admin approved a server as a particular command or URL. When the source now yields another
         // one under the same name (a package update, an edited .mcp.json, a package that took the name of
-        // an .mcp.json entry), that approval does not carry over: the row goes back to disabled and
-        // untrusted, with the reason on it, until an admin has seen the new details.
+        // an .mcp.json entry), that approval does not carry over: the row goes back to disabled,
+        // read-only and with the privacy filter on, with the reason on it, until an admin has seen the
+        // new details.
         $changed = self::connectionChange($server, $existing);
         if ($changed !== null) {
             $kept['enabled'] = false;
-            $kept['read_only'] = false;
+            $kept['read_only'] = true;
             $kept['output_public'] = false;
             $kept['last_error'] = 'Connection details changed by a rescan (' . $changed . '); review and enable again.';
         }
