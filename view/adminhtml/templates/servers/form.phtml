@@ -111,8 +111,8 @@ $authType = (string)$block->getValue('auth_type', 'none');
         <div class="admin__field">
             <div class="admin__field-control">
                 <input id="mago-mcp-read-only" name="read_only" type="checkbox" value="1"<?= $block->isChecked('read_only') ? ' checked' : '' ?>/>
-                <label for="mago-mcp-read-only"><?= $escaper->escapeHtml(__('Read-only server: every tool is a read and runs without the confirmation card')) ?></label>
-                <div class="admin__field-note"><?= $escaper->escapeHtml(__('Only for a server whose tools cannot change anything, such as a documentation lookup. It overrides what each tool\'s name suggests.')) ?></div>
+                <label for="mago-mcp-read-only"><?= $escaper->escapeHtml(__('Read-only server: tools with an unrecognised name are reads and run without the confirmation card')) ?></label>
+                <div class="admin__field-note"><?= $escaper->escapeHtml(__('For a server whose tools cannot change anything, such as a documentation lookup, where names like "resolve-library-id" would otherwise go through the card. It never reaches a tool that runs code, SQL or commands, deals in credentials, carries a write word (delete, cancel, kill) or is marked destructive by the server itself.')) ?></div>
             </div>
         </div>
         <div class="admin__field">
