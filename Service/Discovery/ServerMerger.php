@@ -35,13 +35,66 @@ class ServerMerger
      */
     public static function updatedRow(DiscoveredServer $server, array $existing): array
     {
-        return [
+        $kept = [
             'enabled' => (bool)($existing['enabled'] ?? false),
             'read_only' => (bool)($existing['read_only'] ?? false),
             'output_public' => (bool)($existing['output_public'] ?? false),
             'missing' => false,
             'last_error' => $existing['last_error'] ?? null,
-        ] + $server->toRow();
+        ];
+        // The admin approved a server as a particular command or URL. When the source now yields another
+        // one under the same name (a package update, an edited .mcp.json, a package that took the name of
+        // an .mcp.json entry), that approval does not carry over: the row goes back to disabled and
+        // untrusted, with the reason on it, until an admin has seen the new details.
+        $changed = self::connectionChange($server, $existing);
+        if ($changed !== null) {
+            $kept['enabled'] = false;
+            $kept['read_only'] = false;
+            $kept['output_public'] = false;
+            $kept['last_error'] = 'Connection details changed by a rescan (' . $changed . '); review and enable again.';
+        }
+        // The allowed-tool list is the administrator's too: a rescan that restored the source's list would
+        // put a tool the admin removed back into the catalog. The source's list counts when the row is inserted.
+        if (array_key_exists('allowed_tools', $existing) && is_array($existing['allowed_tools'])) {
+            $kept['allowed_tools'] = $existing['allowed_tools'];
+        }
+
+        return $kept + $server->toRow();
+    }
+
+    /**
+     * The connection fields that differ between the stored row and the rescanned server, as text, or
+     * null when none does. A field the stored row does not carry at all is not compared.
+     *
+     * @param array<string,mixed> $existing
+     */
+    public static function connectionChange(DiscoveredServer $server, array $existing): ?string
+    {
+        $fresh = $server->toRow();
+        $changed = [];
+        foreach (['source', 'transport', 'command', 'env', 'cwd', 'url', 'auth_type'] as $field) {
+            if (!array_key_exists($field, $existing)) {
+                continue;
+            }
+            if (self::normalise($existing[$field]) !== self::normalise($fresh[$field] ?? null)) {
+                $changed[] = $field;
+            }
+        }
+
+        return $changed === [] ? null : implode(', ', $changed);
+    }
+
+    private static function normalise(mixed $value): string
+    {
+        if (is_array($value)) {
+            if (!array_is_list($value)) {
+                ksort($value);
+            }
+
+            return (string)json_encode(array_map(static fn ($v) => is_scalar($v) ? (string)$v : $v, $value));
+        }
+
+        return $value === null ? '' : (string)$value;
     }
 
     /**

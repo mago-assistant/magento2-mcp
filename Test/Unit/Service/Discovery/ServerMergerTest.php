@@ -72,17 +72,55 @@ final class ServerMergerTest extends TestCase
     #[Test]
     public function aRescanKeepsTheAdminsTrustSettings(): void
     {
-        $existing = ['name' => 'docs', 'enabled' => true, 'read_only' => true, 'output_public' => true, 'last_error' => 'x'];
-        $again = new DiscoveredServer('docs', [], [], null, DiscoveredServer::SOURCE_MCP_JSON, url: 'https://new.test/mcp');
+        $existing = ['name' => 'docs', 'enabled' => true, 'read_only' => true, 'output_public' => true, 'last_error' => 'x',
+            'allowed_tools' => ['query-docs'], 'source' => 'mcp_json', 'transport' => 'http', 'command' => [], 'env' => [],
+            'cwd' => null, 'url' => 'https://docs.test/mcp', 'auth_type' => 'none'];
+        $again = new DiscoveredServer('docs', [], [], null, DiscoveredServer::SOURCE_MCP_JSON, label: 'Docs', transport: 'http', url: 'https://docs.test/mcp',
+            allowedTools: ['query-docs', 'code-runner'], timeout: 30);
 
         $row = ServerMerger::updatedRow($again, $existing);
 
-        self::assertSame('https://new.test/mcp', $row['url'], 'connection details follow the source');
+        self::assertSame('Docs', $row['label'], 'details that are not the connection follow the source');
+        self::assertSame(30, $row['timeout']);
         self::assertTrue($row['enabled']);
         self::assertTrue($row['read_only'], 'the admin declared it read-only; a rescan must not undo that');
         self::assertTrue($row['output_public']);
+        self::assertSame(['query-docs'], $row['allowed_tools'], 'a tool the admin removed does not come back with a rescan');
         self::assertFalse($row['missing']);
         self::assertSame('x', $row['last_error']);
+    }
+
+    #[Test]
+    public function aRescanThatChangesTheConnectionWithdrawsTheAdminsApproval(): void
+    {
+        $existing = ['name' => 'tools', 'enabled' => true, 'read_only' => true, 'output_public' => true, 'last_error' => null,
+            'source' => 'mcp_json', 'transport' => 'stdio', 'command' => ['php', 'bin/tools-mcp'], 'env' => [], 'cwd' => null,
+            'url' => '', 'auth_type' => 'none'];
+        $takeover = new DiscoveredServer('tools', ['php', 'vendor/bin/other-mcp'], [], null, DiscoveredServer::SOURCE_COMPOSER);
+
+        $row = ServerMerger::updatedRow($takeover, $existing);
+
+        self::assertSame(['php', 'vendor/bin/other-mcp'], $row['command'], 'the source still owns the connection');
+        self::assertFalse($row['enabled'], 'but what the admin approved was another command: back to disabled');
+        self::assertFalse($row['read_only']);
+        self::assertFalse($row['output_public']);
+        self::assertStringContainsString('source, command', (string)$row['last_error']);
+
+        $sameAgain = new DiscoveredServer('tools', ['php', 'bin/tools-mcp'], [], null, DiscoveredServer::SOURCE_MCP_JSON);
+        self::assertNull(ServerMerger::connectionChange($sameAgain, $existing));
+        self::assertTrue(ServerMerger::updatedRow($sameAgain, $existing)['enabled']);
+
+        $envChanged = new DiscoveredServer('tools', ['php', 'bin/tools-mcp'], ['LD_PRELOAD' => '/tmp/x.so'], null, DiscoveredServer::SOURCE_MCP_JSON);
+        self::assertSame('env', ServerMerger::connectionChange($envChanged, $existing));
+    }
+
+    #[Test]
+    public function aRowWithoutAnAllowedListTakesTheSources(): void
+    {
+        $existing = ['name' => 'docs', 'enabled' => true];
+        $again = new DiscoveredServer('docs', [], [], null, DiscoveredServer::SOURCE_MODULE, allowedTools: ['a']);
+
+        self::assertSame(['a'], ServerMerger::updatedRow($again, $existing)['allowed_tools']);
     }
 
     #[Test]

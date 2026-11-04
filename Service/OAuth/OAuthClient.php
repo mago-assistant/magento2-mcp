@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 namespace MagoAssistant\Mcp\Service\OAuth;
 
+use MagoAssistant\Mcp\Service\Url\EndpointRule;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface as HttpExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -18,7 +19,8 @@ class OAuthClient
     private const TIMEOUT = 15;
 
     public function __construct(
-        private readonly HttpClientInterface $httpClient
+        private readonly HttpClientInterface $httpClient,
+        private readonly EndpointRule $endpointRule
     ) {
     }
 
@@ -29,6 +31,19 @@ class OAuthClient
     public function discover(string $serverUrl): array
     {
         $resourceMetadata = $this->protectedResourceMetadata($serverUrl);
+        // The resource the token is minted for is the MCP server the admin added, or that server's own
+        // origin; metadata naming anything else would have the admin consent to a token for a different
+        // resource at the same authorization server (RFC 9728 §3.3).
+        $resource = $serverUrl;
+        if (is_string($resourceMetadata['resource'] ?? null) && $resourceMetadata['resource'] !== '') {
+            if (!self::sameResource($resourceMetadata['resource'], $serverUrl)) {
+                throw new OAuthException(sprintf(
+                    'The MCP server\'s metadata names another resource (%s) than the server itself; refusing to connect.',
+                    $resourceMetadata['resource']
+                ));
+            }
+            $resource = $resourceMetadata['resource'];
+        }
         $issuer = $resourceMetadata['authorization_servers'][0] ?? null;
         if (!is_string($issuer) || $issuer === '') {
             throw new OAuthException('The MCP server does not name an authorization server.');
@@ -45,6 +60,24 @@ class OAuthClient
         if (!in_array('S256', (array)($serverMetadata['code_challenge_methods_supported'] ?? ['S256']), true)) {
             throw new OAuthException('The authorization server does not support PKCE with S256.');
         }
+        // Metadata that claims to be another issuer's is not this issuer's (RFC 8414 §3.3).
+        if (is_string($serverMetadata['issuer'] ?? null)
+            && rtrim($serverMetadata['issuer'], '/') !== rtrim($issuer, '/')
+        ) {
+            throw new OAuthException(sprintf(
+                'The authorization server metadata names another issuer (%s) than %s; refusing to connect.',
+                $serverMetadata['issuer'],
+                $issuer
+            ));
+        }
+        // The admin is sent to, and this install posts its codes to, these endpoints: https only, or
+        // http on a local host, the rule every URL of this module follows.
+        foreach (['authorization_endpoint', 'token_endpoint', 'registration_endpoint'] as $endpoint) {
+            $url = $serverMetadata[$endpoint] ?? '';
+            if (is_string($url) && $url !== '' && $this->endpointRule->error($url) !== null) {
+                throw new OAuthException(sprintf('The authorization server\'s %s is not an https:// URL.', $endpoint));
+            }
+        }
 
         $scopes = $resourceMetadata['scopes_supported'] ?? $serverMetadata['scopes_supported'] ?? [];
 
@@ -52,9 +85,31 @@ class OAuthClient
             'authorization_endpoint' => $serverMetadata['authorization_endpoint'],
             'token_endpoint' => $serverMetadata['token_endpoint'],
             'registration_endpoint' => (string)($serverMetadata['registration_endpoint'] ?? ''),
-            'resource' => is_string($resourceMetadata['resource'] ?? null) ? $resourceMetadata['resource'] : $serverUrl,
+            'resource' => $resource,
             'scope' => implode(' ', array_filter((array)$scopes, 'is_string')),
         ];
+    }
+
+    /**
+     * Whether a declared resource is the server URL itself or a prefix of it on the same origin (a server
+     * at https://host/mcp may declare https://host or https://host/mcp, never https://host/other).
+     */
+    private static function sameResource(string $declared, string $serverUrl): bool
+    {
+        $a = parse_url($declared);
+        $b = parse_url($serverUrl);
+        if (!is_array($a) || !is_array($b)) {
+            return false;
+        }
+        $origin = static fn (array $p): string => strtolower((string)($p['scheme'] ?? '')) . '://'
+            . strtolower((string)($p['host'] ?? '')) . (isset($p['port']) ? ':' . $p['port'] : '');
+        if ($origin($a) !== $origin($b) || isset($a['query']) || isset($a['fragment'])) {
+            return false;
+        }
+        $declaredPath = rtrim((string)($a['path'] ?? ''), '/');
+        $serverPath = rtrim((string)($b['path'] ?? ''), '/');
+
+        return $declaredPath === '' || $declaredPath === $serverPath || str_starts_with($serverPath, $declaredPath . '/');
     }
 
     /**

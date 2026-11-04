@@ -8,6 +8,7 @@ namespace MagoAssistant\Mcp\Service\Mcp;
 
 use MagoAssistant\Mago\Api\Config\RepositoryInterface as MagoConfig;
 use MagoAssistant\Mago\Logger\DebugLogger;
+use MagoAssistant\Mcp\Service\Privacy\SecretScrub;
 
 // phpcs:disable Magento2.Security.InsecureFunction, Magento2.Functions.DiscouragedFunction, Magento2.Exceptions.TryProcessSystemResources
 // A JSON-RPC session over a child process needs proc_open and raw pipes: Magento\Framework\Shell only
@@ -20,6 +21,10 @@ use MagoAssistant\Mago\Logger\DebugLogger;
 class StdioSession
 {
     private const STDERR_CAP = 65536;
+    /** One JSON-RPC message may not exceed this; a server that streams more is a fault, not a result. */
+    public const MESSAGE_CAP = 8 * 1024 * 1024;
+    /** What a diagnostic line costs in the debug log, masked and bounded. */
+    private const LOG_LINE_CAP = 200;
 
     /** @var resource|null */
     private $process = null;
@@ -41,7 +46,8 @@ class StdioSession
         private readonly string $rootDir,
         private readonly int $timeoutSeconds,
         private readonly DebugLogger $debugLogger,
-        private readonly MagoConfig $magoConfig
+        private readonly MagoConfig $magoConfig,
+        private readonly SecretScrub $secrets
     ) {
     }
 
@@ -178,7 +184,7 @@ class StdioSession
                 if (is_array($decoded)) {
                     return $decoded;
                 }
-                $this->debug('MCP non-JSON line', ['server' => $this->server->name, 'line' => substr($line, 0, 200)]);
+                $this->debug('MCP non-JSON line', ['server' => $this->server->name, 'line' => $this->loggable($line)]);
                 continue;
             }
             $this->fill();
@@ -212,10 +218,20 @@ class StdioSession
             }
             if ($stream === $this->pipes[2]) {
                 $this->stderr = substr($this->stderr . $chunk, 0, self::STDERR_CAP);
-                $this->debug('MCP stderr', ['server' => $this->server->name, 'text' => trim($chunk)]);
+                $this->debug('MCP stderr', ['server' => $this->server->name, 'text' => $this->loggable($chunk)]);
                 continue;
             }
             $this->buffer .= $chunk;
+        }
+        if (strlen($this->buffer) > self::MESSAGE_CAP && strpos($this->buffer, "\n") === false) {
+            // Nothing after the cap is read; close() kills the process as after a timeout.
+            $this->timedOut = true;
+            $this->buffer = '';
+            throw new McpProcessException(sprintf(
+                'MCP server "%s" sent a message larger than %d MB.',
+                $this->server->name,
+                (int)(self::MESSAGE_CAP / 1048576)
+            ));
         }
         if (strpos($this->buffer, "\n") === false && feof($this->pipes[1])) {
             // The process may already have been closed; its exit code is then unknown.
@@ -225,9 +241,20 @@ class StdioSession
                 'MCP server "%s" exited (code %s) before answering: %s',
                 $this->server->name,
                 $status['running'] ? '?' : (string)$status['exitcode'],
-                $first
+                $this->loggable($first)
             ));
         }
+    }
+
+    /**
+     * A child's diagnostic line as it may appear in a log or an error: masked for credentials and cut
+     * short, because a PHP warning can echo an argument and an exception a connection string.
+     */
+    private function loggable(string $text): string
+    {
+        $text = $this->secrets->mask(trim($text));
+
+        return strlen($text) > self::LOG_LINE_CAP ? substr($text, 0, self::LOG_LINE_CAP) . '…' : $text;
     }
 
     private function timeout(): McpTimeoutException

@@ -9,6 +9,7 @@ namespace MagoAssistant\Mcp\Service\Mcp;
 use Magento\Framework\App\Filesystem\DirectoryList;
 use MagoAssistant\Mago\Api\Config\RepositoryInterface as MagoConfig;
 use MagoAssistant\Mago\Logger\DebugLogger;
+use MagoAssistant\Mcp\Service\Privacy\SecretScrub;
 use Symfony\Component\Process\PhpExecutableFinder;
 
 /**
@@ -20,13 +21,21 @@ class StdioSessionFactory
         private readonly DirectoryList $directoryList,
         private readonly DebugLogger $debugLogger,
         private readonly MagoConfig $magoConfig,
-        private readonly PhpExecutableFinder $phpFinder
+        private readonly PhpExecutableFinder $phpFinder,
+        private readonly SecretScrub $secrets
     ) {
     }
 
     public function create(ServerConfig $server, int $timeoutSeconds): StdioSession
     {
-        return new StdioSession($this->resolve($server), $this->directoryList->getRoot(), $timeoutSeconds, $this->debugLogger, $this->magoConfig);
+        return new StdioSession(
+            $this->resolve($server),
+            $this->directoryList->getRoot(),
+            $timeoutSeconds,
+            $this->debugLogger,
+            $this->magoConfig,
+            $this->secrets
+        );
     }
 
     /**

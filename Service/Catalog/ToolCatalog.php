@@ -169,7 +169,15 @@ class ToolCatalog
     private function enabledRows(): array
     {
         if ($this->rowsMemo === null) {
-            $this->rowsMemo = $this->config->isEnabled() ? $this->servers->getEnabled() : [];
+            // A row the last scan did not find (its package removed, its .mcp.json entry gone, the
+            // .mcp.json scan switched off) keeps the admin's enabled flag for when it comes back, but is
+            // not exposed meanwhile: a retired server must not keep running on a stored command.
+            $this->rowsMemo = $this->config->isEnabled()
+                ? array_values(array_filter(
+                    $this->servers->getEnabled(),
+                    static fn (array $row): bool => !(bool)($row['missing'] ?? false)
+                ))
+                : [];
         }
 
         return $this->rowsMemo;
@@ -198,12 +206,15 @@ class ToolCatalog
                 continue;
             }
             $annotations = is_array($tool['annotations'] ?? null) ? $tool['annotations'] : [];
-            [$mode, $origin] = $readOnly
-                ? [ModeClassifier::READ, CatalogEntry::ORIGIN_SERVER]
-                : $this->modeOf($toolName, $annotations);
-            // A read tool is never irreversible, whatever IRREVERSIBLE_WORDS or destructiveHint says.
+            $execution = $this->classifier->isExecutionSurface($toolName);
+            [$mode, $origin] = $this->modeOf($toolName, $annotations, $readOnly, $execution);
+            // A read tool is never irreversible, whatever IRREVERSIBLE_WORDS or destructiveHint says. An
+            // execution tool always is: the card then needs the acknowledgement, and "the assistant cannot
+            // undo this" is literally true of code that already ran.
             $irreversible = $mode === ModeClassifier::WRITE
-                && ($this->classifier->isIrreversible($toolName) || ($annotations['destructiveHint'] ?? false) === true);
+                && ($execution
+                    || $this->classifier->isIrreversible($toolName)
+                    || ($annotations['destructiveHint'] ?? false) === true);
             $entries[] = new CatalogEntry(
                 $name,
                 $toolName,
@@ -215,7 +226,8 @@ class ToolCatalog
                 $this->classifier->isPersonalData($toolName),
                 (string)($row['label'] ?? ''),
                 (bool)($row['output_public'] ?? false),
-                $definition?->fieldClassificationOverrides[$toolName] ?? null
+                $definition?->fieldClassificationOverrides[$toolName] ?? null,
+                $execution
             );
         }
 
@@ -223,23 +235,39 @@ class ToolCatalog
     }
 
     /**
-     * The name classifier's read or write; readOnlyHint false or destructiveHint true turn a read into a
-     * write, and nothing turns a write into a read.
+     * Read or write, strictest voice first. A name that says it runs code, SQL or commands is a write
+     * for everyone: the administrator's read-only declaration overrides only the name classifier's
+     * caution, never the fact that a tool executes. Next, the server's own readOnlyHint false or
+     * destructiveHint true turn a read into a write, again whether or not the server is declared
+     * read-only (a server that says one of its tools is destructive is believed). Then the read-only
+     * declaration makes the rest of the server reads; otherwise the name decides. Nothing turns a write
+     * into a read except that declaration.
      *
      * @param string $tool
      * @param array<string,mixed> $annotations
+     * @param bool $readOnly the row's read_only flag
+     * @param bool $execution the name is an execution surface
      * @return array{0:string,1:string} mode and where it came from
      */
-    private function modeOf(string $tool, array $annotations): array
+    private function modeOf(string $tool, array $annotations, bool $readOnly, bool $execution): array
     {
-        $mode = $this->classifier->classify($tool);
-        if ($mode === ModeClassifier::READ
-            && (($annotations['readOnlyHint'] ?? null) === false || ($annotations['destructiveHint'] ?? null) === true)
-        ) {
+        if ($execution) {
+            return [ModeClassifier::WRITE, CatalogEntry::ORIGIN_EXECUTION];
+        }
+        if ($this->classifier->isSensitive($tool)) {
+            return [ModeClassifier::WRITE, CatalogEntry::ORIGIN_SENSITIVE];
+        }
+        $tightened = ($annotations['readOnlyHint'] ?? null) === false || ($annotations['destructiveHint'] ?? null) === true;
+        if ($tightened && ($readOnly || $this->classifier->classify($tool) === ModeClassifier::READ)) {
             return [ModeClassifier::WRITE, CatalogEntry::ORIGIN_ANNOTATION];
         }
+        // The declaration lifts the classifier's fail-closed caution for an unknown name; a name that
+        // carries a write word (delete, cancel, kill, schedule) keeps it on any server.
+        if ($readOnly && !$this->classifier->hasWriteWord($tool)) {
+            return [ModeClassifier::READ, CatalogEntry::ORIGIN_SERVER];
+        }
 
-        return [$mode, CatalogEntry::ORIGIN_CLASSIFIER];
+        return [$this->classifier->classify($tool), CatalogEntry::ORIGIN_CLASSIFIER];
     }
 
     /**

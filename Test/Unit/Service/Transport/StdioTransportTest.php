@@ -34,9 +34,10 @@ final class StdioTransportTest extends TestCase
         $magoConfig->method('isDebugEnabled')->willReturn(true);
         $this->factory = new StdioSessionFactory(
             new DirectoryList(dirname(__DIR__, 4)),
-            new DebugLogger($this->log, new Json()),
+            new DebugLogger($this->log, new Json(), $magoConfig),
             $magoConfig,
-            new PhpExecutableFinder()
+            new PhpExecutableFinder(),
+            new \MagoAssistant\Mcp\Service\Privacy\SecretScrub()
         );
         $this->client = new StdioTransport($this->factory);
     }
@@ -103,6 +104,18 @@ final class StdioTransportTest extends TestCase
 
         self::assertTrue($result['isError']);
         self::assertSame('Item not found', $result['content'][0]['text']);
+    }
+
+    #[Test]
+    public function aMessageOverTheCapIsAFaultAndTheProcessIsKilled(): void
+    {
+        try {
+            $this->client->callTool($this->server(['FAKE_MCP_HUGE' => '1']), 'echo-args', ['text' => 'x']);
+            self::fail('expected a process error');
+        } catch (McpProcessException $e) {
+            self::assertStringContainsString('larger than 8 MB', $e->getMessage());
+        }
+        self::assertSame([], $this->liveFakeServers());
     }
 
     #[Test]

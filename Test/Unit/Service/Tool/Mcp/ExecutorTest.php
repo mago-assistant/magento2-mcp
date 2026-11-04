@@ -64,9 +64,10 @@ final class ExecutorTest extends TestCase
             $catalog,
             new TransportResolver(['stdio' => $this->transport]),
             $config,
-            new DebugLogger($this->log, $json),
+            new DebugLogger($this->log, $json, $magoConfig),
             new ErrorLogger($this->log, $json),
-            $magoConfig
+            $magoConfig,
+            new \MagoAssistant\Mcp\Service\Privacy\SecretScrub()
         );
     }
 
@@ -87,6 +88,57 @@ final class ExecutorTest extends TestCase
             false,
             false
         );
+    }
+
+    #[Test]
+    public function credentialsAreMaskedOnEveryResultPath(): void
+    {
+        $this->servers->add('demo', true);
+        $this->servers->add('open', true, 'composer', ['output_public' => true]);
+        $executor = $this->executor();
+
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => "host | db\npassword | p4ss\n"]], 'isError' => false];
+        self::assertSame("host | db\npassword | [secret]\n", $executor->run($this->entry('demo', 'db-info'), [])['result']);
+
+        $this->transport->nextResult = ['content' => [], 'structuredContent' => ['dsn' => 'mysql:host=db;password=p4ss'], 'isError' => false];
+        self::assertStringNotContainsString('p4ss', (string)$executor->run($this->entry('demo', 'db-info'), [])['result']);
+
+        $this->transport->nextResult = ['content' => [], 'structuredContent' => ['dsn' => 'mysql:host=db;password=p4ss'], 'isError' => false];
+        self::assertSame(['dsn' => 'mysql:host=db;password=[secret]'], $executor->run($this->entry('open', 'db-info'), [])['result'], 'public data too');
+
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => 'Access denied for mysql://shop:p4ss@db']], 'isError' => true];
+        self::assertSame('Access denied for mysql://shop:[secret]@db', $executor->run($this->entry('demo', 'db-info'), [])['error']);
+
+        $this->transport->failures['demo:db-info'] = 'could not connect with password=p4ss';
+        self::assertSame('could not connect with password=[secret]', $executor->run($this->entry('demo', 'db-info'), [])['error']);
+        self::assertStringNotContainsString('p4ss', $this->log->messages(), 'nor does the error log see it');
+    }
+
+    #[Test]
+    public function anArgumentAskingTheServerToDecryptIsRefused(): void
+    {
+        $this->servers->add('demo', true);
+        $entry = new CatalogEntry('demo', 'config-get', '', ['type' => 'object', 'properties' => ['arguments' => ['type' => 'string']]], ModeClassifier::READ, CatalogEntry::ORIGIN_CLASSIFIER, false, false);
+
+        self::assertNull($this->executor()->problemWith($entry, ['arguments' => 'payment/gateway/api_key']));
+        self::assertStringContainsString('reveal credentials', (string)$this->executor()->problemWith($entry, ['arguments' => '--decrypt payment/gateway/api_key']));
+        self::assertStringContainsString('reveal credentials', (string)$this->executor()->problemWith($entry, ['arguments' => 'x --show-secrets']));
+        self::assertNull($this->executor()->problemWith($entry, ['arguments' => 'the decrypt-helper module']), 'only a switch, not the word');
+    }
+
+    #[Test]
+    public function truncationBacksOffToAWordBoundary(): void
+    {
+        $this->servers->add('demo', true);
+        $executor = $this->executor();
+        $text = str_repeat('word ', 3198) . 'john.smith@example.com and more text that follows';
+
+        $this->transport->nextResult = ['content' => [['type' => 'text', 'text' => $text]], 'isError' => false];
+        $result = (string)$executor->run($this->entry(), [])['result'];
+
+        self::assertStringNotContainsString('john.smith@exam', $result, 'no partial identifier survives the cut');
+        self::assertMatchesRegularExpression('/ \[truncated: \d+ more characters\]$/', $result);
+        self::assertLessThanOrEqual(16000 + 40, mb_strlen($result));
     }
 
     #[Test]

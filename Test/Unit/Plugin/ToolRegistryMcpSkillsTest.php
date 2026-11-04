@@ -88,9 +88,10 @@ final class ToolRegistryMcpSkillsTest extends TestCase
             $catalog,
             new TransportResolver(['stdio' => $this->transport]),
             $config,
-            new DebugLogger($this->log, new Json()),
+            new DebugLogger($this->log, new Json(), $this->createStub(\MagoAssistant\Mago\Api\Config\RepositoryInterface::class)),
             $this->errorLogger(),
-            $this->createStub(MagoConfig::class)
+            $this->createStub(MagoConfig::class),
+            new \MagoAssistant\Mcp\Service\Privacy\SecretScrub()
         );
 
         return new SkillRegistry($catalog, $executor, $this->errorLogger(), new ModeClassifier());
@@ -106,7 +107,7 @@ final class ToolRegistryMcpSkillsTest extends TestCase
         return new ToolRegistryMcpSkills(
             $skills,
             $this->errorLogger(),
-            $authorization ?? new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write']),
+            $authorization ?? new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write', 'MagoAssistant_Mcp::execute']),
             $this->catalog
         );
     }
@@ -168,6 +169,44 @@ final class ToolRegistryMcpSkillsTest extends TestCase
     private static function names(array $tools): array
     {
         return array_values(array_map(static fn (ToolInterface $t): string => $t->getName(), $tools));
+    }
+
+    #[Test]
+    public function aSkillOverGuardedDataIsOfferedOnlyWithTheMagentoResource(): void
+    {
+        $this->transport->tools['demo'][] = ['name' => 'customer-list', 'description' => '', 'inputSchema' => ['type' => 'object']];
+        $this->transport->tools['demo'][] = ['name' => 'order-get', 'description' => '', 'inputSchema' => ['type' => 'object']];
+        $registry = new ToolRegistry(new FakePermissionChecker(), [$this->magoTool]);
+
+        $editor = new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write']);
+        $offered = array_keys($this->plugin(null, $editor)->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7));
+        self::assertContains('mcp_demo__product_list', $offered);
+        self::assertNotContains('mcp_demo__customer_list', $offered, 'no Magento_Customer::manage, no customer tool');
+        self::assertNotContains('mcp_demo__order_get', $offered, 'no Magento_Sales::sales_order, no order tool');
+        self::assertContains('Magento_Customer::manage', $editor->asked);
+
+        $this->catalog = null;
+        $sales = new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write', 'Magento_Sales::sales_order']);
+        $offered = array_keys($this->plugin(null, $sales)->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7));
+        self::assertContains('mcp_demo__order_get', $offered);
+        self::assertNotContains('mcp_demo__customer_list', $offered);
+    }
+
+    #[Test]
+    public function anExecutionToolIsOfferedOnlyWithTheExecuteGrant(): void
+    {
+        $registry = new ToolRegistry(new FakePermissionChecker(), [$this->magoTool]);
+
+        $writer = new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::use_write']);
+        $offered = array_keys($this->plugin(null, $writer)->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7));
+        self::assertContains('mcp_demo__product_delete', $offered, 'an ordinary write');
+        self::assertNotContains('mcp_demo__code_runner', $offered, '"Write" does not include running code');
+
+        $this->catalog = null;
+        $executor = new FakeAuthorization(['MagoAssistant_Mcp::use', 'MagoAssistant_Mcp::execute']);
+        $offered = array_keys($this->plugin(null, $executor)->afterGetEnabledTools($registry, $registry->getEnabledTools(7), 7));
+        self::assertContains('mcp_demo__code_runner', $offered);
+        self::assertNotContains('mcp_demo__product_delete', $offered, 'and execute alone is not "Write" either');
     }
 
     #[Test]

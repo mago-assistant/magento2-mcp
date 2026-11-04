@@ -14,6 +14,7 @@ use MagoAssistant\Mcp\Service\Catalog\CatalogEntry;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 use MagoAssistant\Mcp\Service\Mcp\McpException;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
+use MagoAssistant\Mcp\Service\Privacy\SecretScrub;
 use MagoAssistant\Mcp\Service\Transport\TransportResolver;
 
 /**
@@ -28,7 +29,8 @@ class Executor
         private readonly Config $config,
         private readonly DebugLogger $debugLogger,
         private readonly ErrorLogger $errorLogger,
-        private readonly MagoConfig $magoConfig
+        private readonly MagoConfig $magoConfig,
+        private readonly SecretScrub $secrets
     ) {
     }
 
@@ -67,9 +69,11 @@ class Executor
         try {
             $result = $this->transports->for($server)->callTool($server, $entry->tool, $arguments, $adminUserId);
         } catch (McpException $e) {
-            $this->errorLogger->addLog('MCP call failed', ['skill' => $skill, 'error' => $e->getMessage()]);
+            // A server's error text is its own: masked and bounded like a result before it is logged or shown.
+            $error = $this->truncate($this->secrets->mask($e->getMessage()));
+            $this->errorLogger->addLog('MCP call failed', ['skill' => $skill, 'error' => $error]);
 
-            return ['error' => $e->getMessage()];
+            return ['error' => $error];
         }
         $texts = $this->textBlocks($result);
         $isError = ($result['isError'] ?? false) === true;
@@ -82,7 +86,7 @@ class Executor
             'text_length' => mb_strlen(implode("\n\n", $texts)),
         ]);
         if ($isError) {
-            $error = $texts === [] ? 'The MCP tool reported an error.' : $this->truncate(implode("\n", $texts));
+            $error = $texts === [] ? 'The MCP tool reported an error.' : $this->truncate($this->secrets->mask(implode("\n", $texts)));
 
             return ['error' => $this->withHint($server, $error)];
         }
@@ -108,20 +112,23 @@ class Executor
     {
         $structured = is_array($result['structuredContent'] ?? null) ? $result['structuredContent'] : null;
         if ($server->outputPublic) {
+            // Public data skips Mago's scrub by declaration; credentials are masked on every path.
             if ($structured !== null) {
-                return $structured;
+                return $this->secrets->maskLeaves($structured);
             }
             if (count($texts) === 1) {
                 $decoded = json_decode($texts[0], true);
                 if (is_array($decoded)) {
-                    return $decoded;
+                    return $this->secrets->maskLeaves($decoded);
                 }
             }
 
             return $this->text($result, $texts);
         }
         if ($texts === [] && $structured !== null) {
-            return $this->truncate((string)json_encode($structured, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            return $this->truncate($this->secrets->mask(
+                (string)json_encode($structured, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            ));
         }
 
         return $this->text($result, $texts);
@@ -199,6 +206,13 @@ class Executor
                 return sprintf('missing required argument "%s"', $key);
             }
         }
+        // A tool that takes a command line can be asked to print what it would otherwise keep encrypted
+        // (n98 config:store:get --decrypt). Such a switch is refused in any argument, read or write.
+        foreach ($arguments as $key => $value) {
+            if (is_string($value) && preg_match('/(^|\s)--?(decrypt|show-secrets?|reveal(-secrets?)?|password|passwd)(=|\s|$)/i', $value) === 1) {
+                return sprintf('"%s" asks the server to reveal credentials, which the assistant never does', $key);
+            }
+        }
         $properties = $entry->inputSchema['properties'] ?? [];
         foreach (is_array($properties) ? $properties : [] as $key => $property) {
             if (!is_array($property) || !array_key_exists($key, $arguments) || !is_string($property['type'] ?? null)) {
@@ -259,17 +273,31 @@ class Executor
             return sprintf('(no text content: %d %s block%s)', $count, $kind, $count === 1 ? '' : 's');
         }
 
-        return $this->truncate(implode("\n\n", $texts));
+        return $this->truncate($this->secrets->mask(implode("\n\n", $texts)));
     }
 
+    /**
+     * Cut to the configured maximum, at the last whitespace before it when there is one in the final
+     * tenth: a cut through the middle of an email address or account number leaves a fragment Mago's
+     * scrub no longer recognises, and that fragment would cross unmasked.
+     */
     private function truncate(string $text): string
     {
         $max = $this->config->getMaxResultChars();
-        if (mb_strlen($text) > $max) {
-            return mb_substr($text, 0, $max) . sprintf(' [truncated: %d more characters]', mb_strlen($text) - $max);
+        $length = mb_strlen($text);
+        if ($length <= $max) {
+            return $text;
+        }
+        $cut = $max;
+        $head = mb_substr($text, 0, $max);
+        if (preg_match('/\s(?=\S*$)/u', $head, $m, PREG_OFFSET_CAPTURE) === 1) {
+            $boundary = mb_strlen(substr($head, 0, $m[0][1]));
+            if ($boundary >= (int)floor($max * 0.9)) {
+                $cut = $boundary;
+            }
         }
 
-        return $text;
+        return rtrim(mb_substr($text, 0, $cut)) . sprintf(' [truncated: %d more characters]', $length - $cut);
     }
 
     /**

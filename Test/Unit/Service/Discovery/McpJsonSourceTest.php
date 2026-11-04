@@ -13,6 +13,7 @@ use MagoAssistant\Mago\Logger\ErrorLogger;
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
 use MagoAssistant\Mcp\Service\Discovery\DockerExecUnwrapper;
 use MagoAssistant\Mcp\Service\Discovery\McpJsonSource;
+use MagoAssistant\Mcp\Service\Url\EndpointRule;
 use MagoAssistant\Mcp\Test\Unit\Fakes\FakeLogger;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -43,7 +44,8 @@ final class McpJsonSourceTest extends TestCase
             new DirectoryList($this->root),
             new File(),
             new DockerExecUnwrapper(),
-            new ErrorLogger($this->log, new Json())
+            new ErrorLogger($this->log, new Json()),
+            new EndpointRule()
         );
     }
 
@@ -94,6 +96,24 @@ final class McpJsonSourceTest extends TestCase
         self::assertSame('', $servers[1]->bearerToken);
         self::assertStringContainsString('X-Other', $this->log->messages(), 'an unsupported header is logged');
         self::assertStringNotContainsString('s3cret', $this->log->messages(), 'the token itself is never logged');
+    }
+
+    #[Test]
+    public function aPlainHttpEntryOnANetworkHostIsSkippedAndLogged(): void
+    {
+        file_put_contents($this->root . '/.mcp.json', json_encode(['mcpServers' => [
+            'exposed' => ['type' => 'http', 'url' => 'http://mcp.example.com/mcp', 'headers' => ['Authorization' => 'Bearer s3cret']],
+            'local' => ['type' => 'http', 'url' => 'http://localhost:8080/mcp'],
+            'docker' => ['type' => 'http', 'url' => 'http://mcp.docker/mcp'],
+            'nourl' => ['type' => 'http', 'url' => 'mcp.example.com/mcp'],
+        ]]));
+
+        $servers = $this->source()->discover();
+
+        self::assertSame(['local', 'docker'], array_map(static fn ($s) => $s->name, $servers), 'the admin form\'s rule applies here too');
+        self::assertStringContainsString('exposed', $this->log->messages());
+        self::assertStringContainsString('must use https', $this->log->messages());
+        self::assertStringNotContainsString('s3cret', $this->log->messages());
     }
 
     #[Test]

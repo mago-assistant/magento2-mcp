@@ -157,9 +157,10 @@ final class ServerAdminServiceTest extends TestCase
     {
         $this->servers->add('docs', true, 'mcp_json', ['transport' => 'http', 'url' => 'https://a.test/mcp']);
 
-        $this->service->save(['read_only' => '1', 'url' => 'https://evil.test/mcp', 'label' => 'X'], 'docs');
+        $this->service->save(['read_only' => '1', 'url' => 'https://evil.test/mcp', 'label' => 'X', 'allowed_tools' => "safe-get\n"], 'docs');
 
         self::assertTrue($this->servers->rows['docs']['read_only'], 'trust settings are the admin\'s');
+        self::assertSame(['safe-get'], $this->servers->rows['docs']['allowed_tools'], 'and so is the allowed-tool list');
         self::assertSame('https://a.test/mcp', $this->servers->rows['docs']['url'], 'connection details are the source\'s');
         $this->expectException(\InvalidArgumentException::class);
         $this->service->delete('docs');

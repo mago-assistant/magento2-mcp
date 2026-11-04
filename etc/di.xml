@@ -69,6 +69,30 @@
             <argument name="oauthFactory" xsi:type="object">MagoAssistant\Mcp\Service\OAuth\OAuthAuthenticatorFactory\Proxy</argument>
         </arguments>
     </type>
+    <type name="MagoAssistant\Mcp\Service\Tool\Mcp\SkillRegistry">
+        <arguments>
+            <!-- The tool-name word => Magento ACL resource map every skill answers getActionAcl() from. -->
+            <argument name="dataAcl" xsi:type="object">MagoAssistant\Mcp\Service\Catalog\DataAcl</argument>
+        </arguments>
+    </type>
+    <!--
+        Extend or change the data map here or in any module: word => resource, "" drops a default.
+        Defaults: order/invoice/shipment/creditmemo/quote/cart => Magento_Sales::sales_order;
+        customer/address/email/phone/account/user/subscriber/wishlist => Magento_Customer::manage;
+        review => Magento_Review::reviews_all; configuration/config => Magento_Config::config;
+        db/database/env/environment/log/logs/report/reports => Magento_Backend::system.
+    -->
+    <type name="MagoAssistant\Mcp\Service\Catalog\DataAcl">
+        <arguments>
+            <argument name="overrides" xsi:type="array"/>
+        </arguments>
+    </type>
+    <!-- Credential patterns masked in every result and log line; a module adds its own, never removes a default. -->
+    <type name="MagoAssistant\Mcp\Service\Privacy\SecretScrub">
+        <arguments>
+            <argument name="additionalPatterns" xsi:type="array"/>
+        </arguments>
+    </type>
 
     <!--
         One Mago skill per MCP tool, added to Mago's registry through "after" plugins (no preference,

@@ -8,6 +8,7 @@ namespace MagoAssistant\Mcp\Service\Admin;
 
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
 use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
+use MagoAssistant\Mcp\Service\Url\EndpointRule;
 
 /**
  * Form input for a remote server turned into a row, or a list of reasons it cannot be. Pure, so every rule
@@ -16,8 +17,6 @@ use MagoAssistant\Mcp\Service\Mcp\ServerConfig;
  */
 final class ServerInput
 {
-    private const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
-    private const LOCAL_SUFFIXES = ['.local', '.internal', '.docker', '.test'];
     private const AUTH_TYPES = [ServerConfig::AUTH_NONE, ServerConfig::AUTH_BEARER, ServerConfig::AUTH_OAUTH];
 
     /**
@@ -71,7 +70,6 @@ final class ServerInput
             'cwd' => null,
             'url' => $url,
             'auth_type' => $authType,
-            'allowed_tools' => self::lines((string)($post['allowed_tools'] ?? '')),
             'timeout' => $timeout === '' ? null : (int)$timeout,
             'replaces_skill' => $replaces,
             'enabled' => self::checked($post, 'enabled'),
@@ -86,14 +84,20 @@ final class ServerInput
     }
 
     /**
-     * The settings an administrator owns on any row, whatever its source.
+     * The settings an administrator owns on any row, whatever its source: the trust flags and the list of
+     * tools the server may expose at all, so a discovered server's code runner can be kept out of the
+     * catalog without disabling the server or touching every admin's permissions.
      *
      * @param array<string,mixed> $post
-     * @return array{read_only: bool, output_public: bool}
+     * @return array{read_only: bool, output_public: bool, allowed_tools: string[]}
      */
     public static function validateTrust(array $post): array
     {
-        return ['read_only' => self::checked($post, 'read_only'), 'output_public' => self::checked($post, 'output_public')];
+        return [
+            'read_only' => self::checked($post, 'read_only'),
+            'output_public' => self::checked($post, 'output_public'),
+            'allowed_tools' => self::lines((string)($post['allowed_tools'] ?? '')),
+        ];
     }
 
     /**
@@ -118,34 +122,13 @@ final class ServerInput
             : '';
     }
 
+    /**
+     * The module-wide endpoint rule (Service\Url\EndpointRule); this class is a pure static validator by
+     * design, so the dependency-free rule is instantiated here rather than injected.
+     */
     private static function urlError(string $url): ?string
     {
-        $parts = parse_url($url);
-        $scheme = is_array($parts) ? strtolower((string)($parts['scheme'] ?? '')) : '';
-        $host = is_array($parts) ? strtolower((string)($parts['host'] ?? '')) : '';
-        if ($host === '' || !in_array($scheme, ['https', 'http'], true)) {
-            return 'The URL must be a full https:// address of the MCP endpoint.';
-        }
-        if ($scheme === 'http' && !self::isLocal($host)) {
-            return 'The URL must use https://; plain http:// is only allowed for localhost, 127.0.0.1, [::1] '
-                . 'and hosts ending in .local, .internal, .docker or .test.';
-        }
-
-        return null;
-    }
-
-    private static function isLocal(string $host): bool
-    {
-        if (in_array($host, self::LOCAL_HOSTS, true)) {
-            return true;
-        }
-        foreach (self::LOCAL_SUFFIXES as $suffix) {
-            if (str_ends_with($host, $suffix)) {
-                return true;
-            }
-        }
-
-        return false;
+        return (new EndpointRule())->error($url);
     }
 
     /**

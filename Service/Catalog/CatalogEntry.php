@@ -17,6 +17,10 @@ final class CatalogEntry
     public const ORIGIN_ANNOTATION = 'annotation';
     /** The administrator declared the whole server read-only. */
     public const ORIGIN_SERVER = 'server';
+    /** The name says it runs code, SQL or commands: always a write, whatever the server or the admin says. */
+    public const ORIGIN_EXECUTION = 'execution';
+    /** The name says it deals in credentials: a write for the card alone, whatever the admin says. */
+    public const ORIGIN_SENSITIVE = 'sensitive';
 
     /**
      * @param array<string,mixed> $inputSchema
@@ -24,6 +28,7 @@ final class CatalogEntry
      * @param bool $outputPublic The server's output_public flag
      * @param array<string,array{0:string,1?:string}>|null $fieldClassification The tool's override from a
      *        module definition, or null for the server-wide rule
+     * @param bool $executionSurface The name says the tool runs code, SQL or commands
      */
     public function __construct(
         public readonly string $server,
@@ -36,7 +41,8 @@ final class CatalogEntry
         public readonly bool $personalData,
         public readonly string $label = '',
         public readonly bool $outputPublic = false,
-        public readonly ?array $fieldClassification = null
+        public readonly ?array $fieldClassification = null,
+        public readonly bool $executionSurface = false
     ) {
     }
 

@@ -75,9 +75,10 @@ final class ToolEventRelabelerTest extends TestCase
             $catalog,
             new TransportResolver(['stdio' => $transport]),
             $config,
-            new DebugLogger($log, $json),
+            new DebugLogger($log, $json, $this->createStub(\MagoAssistant\Mago\Api\Config\RepositoryInterface::class)),
             $errorLogger,
-            $this->createStub(MagoConfig::class)
+            $this->createStub(MagoConfig::class),
+            new \MagoAssistant\Mcp\Service\Privacy\SecretScrub()
         );
 
         return new SkillRegistry($catalog, $executor, $errorLogger, new ModeClassifier());

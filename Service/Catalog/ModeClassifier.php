@@ -35,7 +35,15 @@ class ModeClassifier
         'finalize', 'moderate', 'cleanup', 'fill', 'click', 'press', 'drag', 'close', 'fix', 'repair',
         'patch', 'capture', 'rename', 'erase', 'wipe', 'destroy', 'revoke', 'unassign', 'unlink', 'detach',
         'invalidate', 'expire', 'terminate', 'suspend', 'ban', 'reject', 'revert', 'rollback', 'restore',
-        'prune'];
+        'prune', 'schedule'];
+
+    /**
+     * Segments that say the tool deals in credentials or decrypts them. Such a tool is a write for the
+     * card alone (origin "sensitive"), never a cardless read, whatever the rest of its name or the
+     * administrator's read-only declaration says; its result is masked by SecretScrub like every other.
+     */
+    private const SENSITIVE_WORDS = ['env', 'credential', 'credentials', 'secret', 'secrets', 'password', 'passwords',
+        'token', 'tokens', 'dsn', 'decrypt', 'decrypted', 'key', 'keys'];
 
     /** Count as read at the start or the end of a name */
     private const READ_VERBS = ['get', 'list', 'inspect', 'search', 'show', 'read', 'find', 'help',
@@ -57,7 +65,7 @@ class ModeClassifier
      */
     private const EXECUTION_WORDS = ['exec', 'execute', 'eval', 'evaluate', 'run', 'runner', 'script',
         'shell', 'bash', 'terminal', 'console', 'cli', 'command', 'php', 'sql', 'unsafe', 'generate',
-        'scaffold', 'reinitialize', 'install', 'uninstall', 'upgrade', 'migrate', 'batch'];
+        'scaffold', 'reinitialize', 'install', 'uninstall', 'upgrade', 'migrate', 'batch', 'database', 'db'];
 
     /** Segments that name records about a person. An informational flag for the admin, never a mode. */
     private const PERSONAL_DATA_WORDS = ['customer', 'customers', 'order', 'orders', 'invoice', 'invoices',
@@ -89,6 +97,24 @@ class ModeClassifier
     public function isIrreversible(string $toolName): bool
     {
         return array_intersect($this->segments($toolName), self::IRREVERSIBLE_WORDS) !== [];
+    }
+
+    /**
+     * Whether the name carries a write word, as opposed to being a write only by failing closed. The
+     * administrator's read-only declaration lifts the latter (an unknown name on a documentation server)
+     * and never the former (a "delete" is a delete on any server).
+     */
+    public function hasWriteWord(string $toolName): bool
+    {
+        return array_intersect($this->segments($toolName), self::WRITE_WORDS) !== [];
+    }
+
+    /**
+     * Whether the name says the tool deals in credentials or decrypts them.
+     */
+    public function isSensitive(string $toolName): bool
+    {
+        return array_intersect($this->segments($toolName), self::SENSITIVE_WORDS) !== [];
     }
 
     /**

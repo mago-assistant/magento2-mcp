@@ -141,9 +141,18 @@ final class ServerInputTest extends TestCase
     #[Test]
     public function trustSettingsAreTheOnlyEditableFieldsOfADiscoveredRow(): void
     {
-        $result = ServerInput::validateTrust(['read_only' => '1', 'url' => 'https://evil.test/mcp']);
+        $result = ServerInput::validateTrust([
+            'read_only' => '1',
+            'url' => 'https://evil.test/mcp',
+            'allowed_tools' => "product-list\n\n order-get ",
+        ]);
 
-        self::assertSame(['read_only' => true, 'output_public' => false], $result);
+        self::assertSame(
+            ['read_only' => true, 'output_public' => false, 'allowed_tools' => ['product-list', 'order-get']],
+            $result,
+            'the allowed-tool list is a trust setting: it keeps a discovered server\'s code runner out of the catalog'
+        );
+        self::assertSame([], ServerInput::validateTrust([])['allowed_tools'], 'absent means every tool');
     }
 
     #[Test]

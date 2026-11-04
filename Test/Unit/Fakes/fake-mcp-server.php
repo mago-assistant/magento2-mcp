@@ -65,7 +65,15 @@ while (($line = fgets(STDIN)) !== false) {
         case 'tools/call':
             $name = $request['params']['name'] ?? '';
             $args = $request['params']['arguments'] ?? [];
-            if ($name === 'echo-args') {
+            if ($name === 'echo-args' && getenv('FAKE_MCP_HUGE') === '1') {
+                // One message well over the client's cap, in chunks so memory stays low here.
+                fwrite(STDOUT, '{"jsonrpc":"2.0","id":' . json_encode($id) . ',"result":{"content":[{"type":"text","text":"');
+                for ($i = 0; $i < 10; $i++) {
+                    fwrite(STDOUT, str_repeat('x', 1024 * 1024));
+                }
+                fwrite(STDOUT, "\"}]}}\n");
+                fflush(STDOUT);
+            } elseif ($name === 'echo-args') {
                 $send(['jsonrpc' => '2.0', 'method' => 'notifications/message', 'params' => ['level' => 'info', 'data' => 'working']]);
                 $send(['jsonrpc' => '2.0', 'id' => 'srv-ping-1', 'method' => 'ping']);
                 $send(['jsonrpc' => '2.0', 'id' => $id, 'result' => ['content' => [['type' => 'text', 'text' => json_encode($args)]], 'isError' => false]]);

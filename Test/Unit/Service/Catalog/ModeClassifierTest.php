@@ -114,11 +114,42 @@ final class ModeClassifierTest extends TestCase
             'generate-module', 'reinitialize', 'setup_upgrade', 'run_command', 'php-eval'] as $tool) {
             self::assertTrue($classifier->isExecutionSurface($tool), $tool);
         }
-        foreach (['order-cancel', 'product-update', 'db_query', 'coupon-code-list', 'deploy_mode_show',
-            'drop_table', 'product-list', ''] as $tool) {
+        foreach (['order-cancel', 'product-update', 'coupon-code-list', 'deploy_mode_show',
+            'drop_table', 'product-list', 'query-docs', ''] as $tool) {
             self::assertFalse($classifier->isExecutionSurface($tool), $tool);
+        }
+        foreach (['database-query', 'db_query', 'database-schema', 'db_info'] as $tool) {
+            self::assertTrue($classifier->isExecutionSurface($tool), $tool . ': raw database access is an execution surface');
         }
         self::assertTrue($classifier->isIrreversible('drop_table'));
         self::assertTrue($classifier->isIrreversible('truncate-logs'));
+    }
+
+    #[Test]
+    public function tellsAWriteWordFromAFailClosedWrite(): void
+    {
+        $classifier = new ModeClassifier();
+
+        foreach (['product-delete', 'order-cancel', 'sys_cron_kill', 'sys_cron_schedule', 'log-clear'] as $tool) {
+            self::assertTrue($classifier->hasWriteWord($tool), $tool);
+            self::assertSame(ModeClassifier::WRITE, $classifier->classify($tool));
+        }
+        foreach (['resolve-library-id', 'query-docs', 'rotate', 'product-list', ''] as $tool) {
+            self::assertFalse($classifier->hasWriteWord($tool), $tool . ' is a write by failing closed, or a read');
+        }
+    }
+
+    #[Test]
+    public function recognisesCredentialToolsByWholeSegments(): void
+    {
+        $classifier = new ModeClassifier();
+
+        foreach (['config_env_show', 'env-show', 'credentials-get', 'secret_get', 'config_store_get_decrypted',
+            'api-key-list', 'token-list', 'db_dsn'] as $tool) {
+            self::assertTrue($classifier->isSensitive($tool), $tool);
+        }
+        foreach (['config_store_get', 'product-list', 'keyword-search', 'tokenise-text', ''] as $tool) {
+            self::assertFalse($classifier->isSensitive($tool), $tool);
+        }
     }
 }

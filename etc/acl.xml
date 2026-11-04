@@ -4,18 +4,18 @@
     <acl>
         <resources>
             <resource id="Magento_Backend::admin">
-                <resource id="Magento_Backend::stores">
-                    <resource id="Magento_Backend::stores_settings">
-                        <resource id="Magento_Config::config">
-                            <resource id="MagoAssistant_Mago::config">
-                                <resource id="MagoAssistant_Mcp::manage" title="MCP Servers" sortOrder="50"/>
-                            </resource>
-                        </resource>
-                    </resource>
-                </resource>
+                <!--
+                    All four live under the assistant, not under Stores > Configuration: "manage" sets a
+                    server's trust settings (read-only, public output) and enables servers, which is a
+                    grant over what every admin's assistant may do, not a store setting. "execute" is a
+                    tool whose name says it runs code, SQL or commands: that is the web server user running
+                    whatever the arguments say, so it is its own grant and not part of "Write".
+                -->
                 <resource id="MagoAssistant_Mago::assistant">
                     <resource id="MagoAssistant_Mcp::use" title="MCP Tools - Read" sortOrder="40"/>
                     <resource id="MagoAssistant_Mcp::use_write" title="MCP Tools - Write" sortOrder="41"/>
+                    <resource id="MagoAssistant_Mcp::execute" title="MCP Tools - Execute code, SQL or commands" sortOrder="42"/>
+                    <resource id="MagoAssistant_Mcp::manage" title="MCP Servers (enable, trust settings)" sortOrder="43"/>
                 </resource>
             </resource>
         </resources>

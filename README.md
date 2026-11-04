@@ -61,11 +61,17 @@ copy of the same name is logged and dropped. A `manual` row is never touched by 
 
 Discovery never enables anything by itself. It only makes a server visible so an administrator can
 turn it on. The source owns a discovered row's connection details; the administrator owns every row's
-**trust settings**: enabled, read-only and public output. A rescan re-applies the connection details from
-the source and keeps the trust settings (and a stored bearer token when the source supplies none); a
-source's values for the trust settings count only when the row is first inserted. A server a source no longer yields, a
+**trust settings**: enabled, read-only, public output and the allowed-tool list. A rescan re-applies the
+connection details from the source and keeps the trust settings (and a stored bearer token when the
+source supplies none); a source's values for the trust settings count only when the row is first
+inserted. One exception: the approval was given to a particular command or URL. When a rescan finds a
+different source, transport, command, environment, working directory, URL or auth type under a known
+name (a package update, an edited `.mcp.json`, a package that took the name of an `.mcp.json` entry),
+the row goes back to disabled with read-only and public output cleared and the reason in its status,
+until an admin has looked at the new details and enabled it again. A server a source no longer yields, a
 removed package, a disabled module, `.mcp.json` scanning switched off, is flagged Missing in the grid
-and in `mago:mcp:discover`, but stays enabled until you disable it.
+and in `mago:mcp:discover` and is not exposed to the assistant while it is; its enabled flag is kept
+for when it returns.
 
 Names are normalised: lower-cased; every run of characters other than `a-z0-9_` becomes one `_`;
 leading and trailing `_` are trimmed; then a leading `magento2_`, `magento_` and `module_` and a
@@ -78,12 +84,13 @@ trailing `_mcp_server` or `_mcp` are removed, each only if something remains. A 
 In the admin: **Stores > Admin Assistant > MCP Servers** is a grid of known servers with Enable and
 Disable per row and Rescan and Refresh tool lists as toolbar buttons.
 
-**Add server** opens a form for a remote server: label, URL, authentication, bearer token, allowed tools,
-timeout, the skill it replaces, and the trust settings. The name is derived from the label once and never
-changes, because it keys OAuth tokens, the cache and the per-user permission rows. A blank token field on
-edit keeps the stored token, which is never shown again, but only while the URL stays on the same host:
-pointing the row at another host requires typing the token again. **Edit** on a discovered row shows its
-connection details as text and changes only its trust settings. **Delete** is offered on rows added here;
+**Add server** opens a form for a remote server: label, URL, authentication, bearer token, timeout, the
+skill it replaces, and the trust settings (read-only, public output, allowed tools). The name is derived
+from the label once and never changes, because it keys OAuth tokens, the cache and the per-user
+permission rows. A blank token field on edit keeps the stored token, which is never shown again, but only
+while the URL stays on the same host: pointing the row at another host requires typing the token again.
+**Edit** on a discovered row shows its connection details as text and changes only its trust settings,
+the allowed-tool list among them. **Delete** is offered on rows added here;
 it removes every admin's OAuth tokens and the client registration with the row, and so does changing an
 OAuth server's URL, whether on the form or through a rescan of its source.
 
@@ -207,9 +214,14 @@ copy is encrypted. This module registers no definition itself. The registry's de
 
 ### Allowed tools
 
-`allowedTools` is a token-cost filter, not a permission: every exposed tool's definition is sent to the
-model on every turn, so a server with sixty tools you use three of is worth trimming. A name not on the
-list is simply not a skill. Who may call a listed tool is still Mago's ACL and per-user table.
+`allowedTools` is the list of tools a server may expose at all: a name not on the list is not a skill,
+for anyone, whatever grants they hold. It is one of the administrator's trust settings on every row,
+discovered or manual (**Allowed tools** on the edit page, one name per line, empty for all), and a rescan
+keeps it; the source's list counts when the row is first inserted. It is the way to keep a discovered
+server's code runner or SQL tool out of the assistant without disabling the server or touching every
+admin's permissions. It also saves tokens: every exposed tool's definition is sent to the model on every
+turn, so a server with sixty tools you use three of is worth trimming. Who may call a listed tool is
+still Mago's ACL and per-user table.
 
 ## How a tool reaches the model
 
@@ -239,12 +251,29 @@ the tool name (`Getting order...`) as the status line.
 
 ## Read-only servers
 
-An administrator can declare a server **read-only** on its edit page. Every tool of that server is then a
-`read` (shown as `read (server)` in `mago:mcp:list`), runs without the confirmation card, and is never
-flagged irreversible, whatever its name says. Use it for a server whose tools cannot change anything,
-such as a documentation lookup; the classifier below is deliberately cautious and would otherwise send
-names like `resolve-library-id` or `query-docs` through the card. A module definition can set
-`readOnly` as the starting value.
+An administrator can declare a server **read-only** on its edit page. Every tool of that server whose
+name the classifier below would have judged is then a `read` (shown as `read (server)` in
+`mago:mcp:list`), runs without the confirmation card, and is never flagged irreversible. Use it for a
+server whose tools cannot change anything, such as a documentation lookup; the classifier is
+deliberately cautious and would otherwise send names like `resolve-library-id` or `query-docs` through
+the card. A module definition can set `readOnly` as the starting value.
+
+The declaration lifts one thing only: the classifier's fail-closed caution about a name it does not
+recognise (`resolve-library-id`, `query-docs`). It never reaches:
+
+- a name that carries a **write word** (`delete`, `cancel`, `kill`, `schedule`, ...): a delete is a
+  delete on any server;
+- an **execution tool** (a name carrying `exec`, `execute`, `run`, `runner`, `script`, `sql`, `php`,
+  `shell`, `batch`, `database`, `db` and the rest of the list under "Read or write"): that stays an
+  irreversible write under its own `MCP Tools - Execute` grant, because what runs is whatever the
+  arguments say;
+- a **credential tool** (a name carrying `env`, `secret`, `password`, `token`, `key`, `decrypt`, ...):
+  a write for the card alone, never a cardless read;
+- a tool the server itself annotates `readOnlyHint: false` or `destructiveHint: true`: a server that
+  says one of its tools is destructive is believed, declared read-only or not.
+
+So a read-only declaration on a server such as Bricklayer makes its lookups cardless and leaves
+`code-runner`, `batch-execute`, `database-query` and `customer-delete` exactly where they were.
 
 ## Read or write
 
@@ -281,22 +310,78 @@ setting, or by disabling the server, until upstream fixes its name.
 
 A tool's type is then fixed, exactly like one of Mago's own skills carrying its type in code: there is
 no override, no `disabled` mode, and no hidden state. Who may use a tool is Mago's business alone, the
-role ACL (`MCP Tools - Read` / `MCP Tools - Write`) and the per-user table on that tool's own Skills &
-Permissions page. A `write` tool goes through Mago's confirmation card before it runs; a tool whose name
-carries `delete`, `cancel`, `creditmemo`, `remove`, `drop`, `truncate` or `purge`, or whose server marks
-it `destructiveHint: true`, is flagged irreversible and the card shows its impacts. Arguments are
+role ACL and the per-user table on that tool's own Skills & Permissions page. A `write` tool goes
+through Mago's confirmation card before it runs; a tool whose name carries `delete`, `cancel`,
+`creditmemo`, `remove`, `drop`, `truncate` or `purge`, or whose server marks it `destructiveHint: true`,
+is flagged irreversible and the card shows its impacts and asks for the acknowledgement. Arguments are
 validated for every tool, read or write: a missing required argument or an argument of the wrong type
 (string, integer, number, boolean, array, object, null) is refused before anything runs, and for a write
 before the card is shown.
 
-A tool whose name says it runs code, SQL or commands (`exec`, `execute`, `eval`, `evaluate`, `run`,
-`runner`, `script`, `shell`, `bash`, `terminal`, `console`, `cli`, `command`, `php`, `sql`, `unsafe`,
-`generate`, `scaffold`, `reinitialize`, `install`, `uninstall`, `upgrade`, `migrate`, `batch`) carries
-` [runs code, SQL or commands]` on its description and `execution` in `mago:mcp:list`. Tools that return
+A tool whose name says it runs code, SQL or commands, or touches the database directly (`exec`,
+`execute`, `eval`, `evaluate`, `run`, `runner`, `script`, `shell`, `bash`, `terminal`, `console`, `cli`,
+`command`, `php`, `sql`, `unsafe`, `generate`, `scaffold`, `reinitialize`, `install`, `uninstall`,
+`upgrade`, `migrate`, `batch`, `database`, `db`) is an **execution tool**: always an irreversible write
+(`write (execution)` in `mago:mcp:list`), whatever the server's annotations or the read-only
+declaration say, carrying ` [runs code, SQL or commands]` on its description. A tool whose name says it
+deals in credentials (`env`, `credential`, `secret`, `password`, `token`, `key`, `dsn`, `decrypt`, and
+plurals) is a write for the card alone (`write (sensitive)`), never a cardless read. Tools that return
 personal data by their name (`customer`, `order`, `invoice`, `shipment`, `creditmemo`, `address`,
 `email`, `phone`, `account`, `user`, `subscriber`, `quote`, `cart`, `wishlist`, `review`, and their
-plurals) carry ` [personal data]` the same way and `personal-data` in `mago:mcp:list`. Both flags are
-information; neither changes a tool's type.
+plurals) carry ` [personal data]` and `personal-data` in `mago:mcp:list`; that flag is information and
+changes no type, but the same words decide the Magento resource below.
+
+Whatever a tool returns, credentials in it are masked before the model, the chat or a log sees it: a
+value after a key such as `password`, `secret`, `api_key`, `token` or `dsn`, an encrypted Magento value,
+a bearer header, a password inside a URL or a `mysql -p` string, an admin URL key. The masking is
+pattern-based and errs on the side of masking. A CLI-style argument that asks a server to decrypt or
+reveal secrets (`--decrypt`, `--show-secrets`, `--password`) is refused before the call.
+
+### Which grants a call needs
+
+Mago's `ToolAccess` requires every resource a call declares, and an MCP skill declares two:
+
+| | resource | title in the role tree |
+|---|---|---|
+| a read tool | `MagoAssistant_Mcp::use` | MCP Tools - Read |
+| a write tool | `MagoAssistant_Mcp::use_write` | MCP Tools - Write |
+| an execution tool | `MagoAssistant_Mcp::execute` | MCP Tools - Execute code, SQL or commands |
+| the servers page | `MagoAssistant_Mcp::manage` | MCP Servers (enable, trust settings) |
+
+and, besides one of the first three, **the Magento resource of the data its name points at**, the way
+Mago's own skills name theirs, so an admin Magento keeps out of Customers or Orders is kept out of them
+through an MCP server too:
+
+| word in the tool's name | resource required |
+|---|---|
+| `order`, `invoice`, `shipment`, `creditmemo`, `quote`, `cart` (and plurals) | `Magento_Sales::sales_order` |
+| `customer`, `address`, `email`, `phone`, `account`, `user`, `subscriber`, `wishlist` (and plurals) | `Magento_Customer::manage` |
+| `review`, `reviews` | `Magento_Review::reviews_all` |
+| `configuration`, `config` | `Magento_Config::config` |
+| `db`, `database`, `env`, `environment`, `log`, `logs`, `report`, `reports` | `Magento_Backend::system` |
+
+Sales words are matched first, so `customer-orders` is a sales tool. A name with none of these words
+(`product-list`, `module-list`, `code-runner`) needs only the module's own grant. The map is extended or
+changed from any module's `di.xml` (`""` drops a default):
+
+```xml
+<type name="MagoAssistant\Mcp\Service\Catalog\DataAcl">
+    <arguments>
+        <argument name="overrides" xsi:type="array">
+            <item name="ticket" xsi:type="string">Vendor_Helpdesk::tickets</item>
+            <item name="review" xsi:type="string"></item>
+        </argument>
+    </arguments>
+</type>
+```
+
+A tool the role may not run is not offered to the model at all; Mago checks the same resources again
+when the tool runs, so a confirmed write proposed under one role is refused if the role changed.
+
+All four of the module's resources sit under the assistant in the role tree (`Admin Assistant`), none
+under Stores > Configuration: `manage` enables servers and sets their trust settings, which decides
+what every admin's assistant may do, and `execute` is the web server user running whatever the
+arguments say. Grant both to few roles.
 
 ## Results and privacy
 
@@ -326,20 +411,45 @@ to try next.
 
 ## Security
 
-An execution tool, a code runner, a raw SQL query tool, is a write skill like any other MCP tool:
-available, behind the confirmation card, to every admin whose role holds `MCP Tools - Write`. The
-trade-off is deliberate: one confirmation click stands between that permission and arbitrary PHP or SQL
-running on the store, in exchange for MCP tools behaving exactly like Mago's own skills. Restrict it
-the way any of Mago's own write skills is restricted: grant `MCP Tools - Write` to few roles, set the
-tool to Disabled for the users who should not have it, or disable the server.
+An execution tool, a code runner, a raw SQL tool, a batch runner, is arbitrary PHP or SQL running on
+the store as the web server user, one confirmation away. It therefore has its own grant,
+`MCP Tools - Execute`, which `MCP Tools - Write` does not include; it is always an irreversible write,
+so the card asks for the acknowledgement and names the risk; and the read-only declaration never
+reaches it. Grant `execute` to the few roles that deploy code. Where even that is too much, take the
+tool off the server's **Allowed tools** and it is not a skill at all. A tool that executes without
+saying so in its name (`database-query`) is a plain write: keep it out through **Allowed tools**.
+
+What an MCP tool returns is gated by the Magento resource its name points at ("Which grants a call
+needs" above), so the assistant cannot read customers, orders or configuration for an admin who may not
+open those screens. The map is word-based; a server whose tool names hide what they return (`lookup`,
+`fetch-record`) gets the module's own grant only. Review a new server's tools with `mago:mcp:list` before
+enabling it, and extend the map from `di.xml` when a name needs a resource it does not get.
 
 Bearer tokens are encrypted in the database with Magento's encryptor, never logged, and never shown
-in the grid or the CLI; a token written in `.mcp.json` or `di.xml` stays plain text in that file.
-Nothing checks for `https://`, so an `http://` URL sends the token unencrypted. A remote server is a
-third party: its `readOnlyHint: true` is not trusted, its result
-is scrubbed as one string unless an administrator marks it public, and its instructions are truncated
-and labelled as coming from the server. Prompt injection through tool results is not otherwise
-mitigated.
+in the grid or the CLI; a token written in `.mcp.json` or `di.xml` stays plain text in that file. A URL
+must be `https://`, or `http://` on a local host (`localhost`, `127.0.0.1`, `[::1]`, `.local`,
+`.internal`, `.docker`, `.test`), on the admin form and in `.mcp.json` alike; an `http://` entry on
+any other host is skipped and logged. An admin with `manage` can still point a server at any host the
+Magento server can reach, including internal ones. A remote server is a third party: its
+`readOnlyHint: true` is not trusted, its result is scrubbed as one string unless an administrator marks
+it public, one message from it may not exceed 8 MB, and the text it supplies about itself (its
+initialize instructions, a tool's description) goes to the model fenced as server-supplied data, capped,
+with a forged closing marker defused. For an OAuth server, the metadata it points the admin at must name
+the server itself as the resource, an issuer that matches, and `https://` endpoints.
+
+**Prompt injection** is the open edge. Text a shopper typed, an order comment, an address line, a
+review, a product question, reaches the model inside a tool result wrapped in Mago's `tool_output`
+markers and a reminder that it is data; that is the only barrier between such text and the model's
+next tool call. A read it talks the model into runs without a card; a write or an execution shows
+the card, whose impacts for an execution tool now say that text the assistant read may be what asked
+for the call. Three mitigations belong to Mago rather than this module and are not in place: marking
+customer-written text in MCP results so it can never be copied into a write argument (Mago does this
+for its own review skill); keeping vault tokens out of the arguments of a read call to a remote http
+server, which today rehydrates them and sends the real value to that host; and sending a skill's
+just-in-time instructions through the same `tool_output` envelope as a result instead of as a system
+message, so the fence this module draws around server text carries no more authority than the text.
+Also Mago's: a confirmed proposal runs every stored call, including one the card did not describe
+because it was unavailable at proposal time; only the described calls should run.
 
 A stdio server is spawned from the web request under the PHP user, inheriting the PHP process's whole
 environment with the stored variables merged over it. Whatever a Composer `extra.mago-mcp` block, a
@@ -403,8 +513,8 @@ never written to any log.
   its own documentation suggests.
 - **No widgets.** Only a tool's text or structured content is used; image and other blocks are counted,
   not rendered.
-- **One permission grant for all servers.** `MagoAssistant_Mcp::use` / `::use_write` are not split per
-  server.
+- **One set of grants for all servers.** `MagoAssistant_Mcp::use` / `::use_write` / `::execute` are not
+  split per server; the Magento data resources are per tool name, not per server.
 - **Protocol versions 2024-11-05 through 2025-06-18** are negotiated over stdio; HTTP speaks 2025-06-18.
 
 ## Development

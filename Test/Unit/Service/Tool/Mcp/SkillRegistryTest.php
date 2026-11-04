@@ -76,9 +76,10 @@ final class SkillRegistryTest extends TestCase
             $catalog,
             new TransportResolver(['stdio' => $this->transport]),
             $config,
-            new DebugLogger($this->log, $json),
+            new DebugLogger($this->log, $json, $this->createStub(\MagoAssistant\Mago\Api\Config\RepositoryInterface::class)),
             $errorLogger,
-            $this->createStub(MagoConfig::class)
+            $this->createStub(MagoConfig::class),
+            new \MagoAssistant\Mcp\Service\Privacy\SecretScrub()
         );
 
         return new SkillRegistry($catalog, $executor, $errorLogger, new ModeClassifier());

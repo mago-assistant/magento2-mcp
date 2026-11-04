@@ -10,6 +10,7 @@ use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Exception\FileSystemException;
 use Magento\Framework\Filesystem\Driver\File;
 use MagoAssistant\Mago\Logger\ErrorLogger;
+use MagoAssistant\Mcp\Service\Url\EndpointRule;
 
 /**
  * Servers configured for Claude Code or Cursor in the Magento root's .mcp.json.
@@ -20,7 +21,8 @@ class McpJsonSource implements SourceInterface
         private readonly DirectoryList $directoryList,
         private readonly File $file,
         private readonly DockerExecUnwrapper $unwrapper,
-        private readonly ErrorLogger $errorLogger
+        private readonly ErrorLogger $errorLogger,
+        private readonly EndpointRule $endpointRule
     ) {
     }
 
@@ -90,6 +92,17 @@ class McpJsonSource implements SourceInterface
             $this->errorLogger->addLog(
                 'MCP discovery',
                 ['file' => '.mcp.json', 'server' => $name, 'skipped' => 'type ' . $type . ' is not Streamable HTTP']
+            );
+
+            return null;
+        }
+        // The same rule as the admin form: https://, or http:// for a local host only, so a bearer token
+        // written next to the URL is never sent in clear across a network.
+        $urlError = $this->endpointRule->error((string)$entry['url']);
+        if ($urlError !== null) {
+            $this->errorLogger->addLog(
+                'MCP discovery',
+                ['file' => '.mcp.json', 'server' => $name, 'skipped' => $urlError]
             );
 
             return null;

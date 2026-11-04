@@ -162,16 +162,19 @@ class ToolRegistryMcpSkills
 
     /**
      * Whether this admin is offered this skill: its server is enabled and, for OAuth, connected by them;
-     * Mago's own permission check allows it; and the role holds the skill's ACL resource.
+     * Mago's own permission check allows it; and the role holds the skill's ACL resource and the Magento
+     * resource of the data its name points at (what ToolAccess will require when it runs).
      */
     private function offered(ToolRegistry $subject, McpSkill $skill, ?int $adminUserId): bool
     {
         $server = $this->catalog->serverConfig($skill->entry()->server);
+        $dataAcl = $skill->getActionAcl([]);
 
         return $server !== null
             && $this->catalog->connected($server, $adminUserId)
             && $subject->isCallAllowed($skill, [], $adminUserId)
-            && $this->authorization->isAllowed($skill->getMagentoAcl());
+            && $this->authorization->isAllowed($skill->getMagentoAcl())
+            && ($dataAcl === null || $this->authorization->isAllowed($dataAcl));
     }
 
     /**

@@ -141,7 +141,7 @@ final class ToolCatalogTest extends TestCase
 
         $byTool = array_combine(array_map(static fn ($e) => $e->tool, $all), $all);
         self::assertSame(ModeClassifier::WRITE, $byTool['code-runner']->mode);
-        self::assertSame(CatalogEntry::ORIGIN_CLASSIFIER, $byTool['code-runner']->modeOrigin);
+        self::assertSame(CatalogEntry::ORIGIN_EXECUTION, $byTool['code-runner']->modeOrigin);
         self::assertFalse($byTool['product-delete']->personalData);
     }
 
@@ -365,19 +365,105 @@ final class ToolCatalogTest extends TestCase
     }
 
     #[Test]
-    public function aReadOnlyServerMakesEveryToolARead(): void
+    public function aReadOnlyServerMakesEveryNameClassifiedToolARead(): void
     {
         $this->servers->add('demo', true, 'composer', ['read_only' => true]);
 
         $entries = $this->catalog()->entries();
+        $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
 
-        self::assertNotEmpty($entries);
-        foreach ($entries as $entry) {
-            self::assertSame(ModeClassifier::READ, $entry->mode, $entry->tool . ' is a read on a read-only server');
-            self::assertSame(CatalogEntry::ORIGIN_SERVER, $entry->modeOrigin);
-            self::assertFalse($entry->irreversible, $entry->tool . ' is never irreversible as a read');
+        foreach (['product-list', 'customer-get', 'weather'] as $tool) {
+            self::assertSame(ModeClassifier::READ, $byTool[$tool]->mode, $tool . ' is a read on a read-only server');
+            self::assertSame(CatalogEntry::ORIGIN_SERVER, $byTool[$tool]->modeOrigin);
+            self::assertFalse($byTool[$tool]->irreversible, $tool . ' is never irreversible as a read');
         }
-        self::assertContains('product-delete', array_map(static fn ($e) => $e->tool, $entries));
+        self::assertSame(ModeClassifier::WRITE, $byTool['product-delete']->mode, 'a name carrying a write word keeps it on any server');
+        self::assertSame(CatalogEntry::ORIGIN_CLASSIFIER, $byTool['product-delete']->modeOrigin);
+        self::assertTrue($byTool['product-delete']->irreversible);
+    }
+
+    #[Test]
+    public function aReadOnlyServerLeavesCronAndCredentialToolsBehindTheCard(): void
+    {
+        $this->transport->tools['demo'] = [
+            ['name' => 'sys_cron_schedule', 'description' => '', 'inputSchema' => ['type' => 'object']],
+            ['name' => 'sys_cron_kill', 'description' => '', 'inputSchema' => ['type' => 'object']],
+            ['name' => 'config_env_show', 'description' => '', 'inputSchema' => ['type' => 'object']],
+            ['name' => 'resolve-library-id', 'description' => '', 'inputSchema' => ['type' => 'object']],
+        ];
+        $this->servers->add('demo', true, 'composer', ['read_only' => true]);
+
+        $entries = $this->catalog()->entries();
+        $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
+
+        self::assertSame(ModeClassifier::WRITE, $byTool['sys_cron_schedule']->mode, '"schedule" is a write word');
+        self::assertSame(ModeClassifier::WRITE, $byTool['sys_cron_kill']->mode, '"kill" is a write word');
+        self::assertSame(ModeClassifier::WRITE, $byTool['config_env_show']->mode, 'a credential tool is never a cardless read');
+        self::assertSame(CatalogEntry::ORIGIN_SENSITIVE, $byTool['config_env_show']->modeOrigin);
+        self::assertSame(ModeClassifier::READ, $byTool['resolve-library-id']->mode, 'the unknown name the declaration is for');
+        self::assertSame(CatalogEntry::ORIGIN_SERVER, $byTool['resolve-library-id']->modeOrigin);
+    }
+
+    #[Test]
+    public function aMissingServerIsNotExposedThoughStillEnabled(): void
+    {
+        $this->servers->add('demo', true, 'composer', ['missing' => true]);
+        $this->transport->tools['gone'] = [['name' => 'x-get', 'description' => '', 'inputSchema' => []]];
+
+        self::assertSame([], $this->catalog()->entries(), 'a server the last scan did not find runs nothing');
+        self::assertNull($this->catalog()->serverConfig('demo'));
+        self::assertSame(0, $this->transport->listCalls, 'and is not even contacted');
+        self::assertTrue($this->servers->rows['demo']['enabled'], 'the admin\'s choice is kept for when it returns');
+    }
+
+    #[Test]
+    public function aReadOnlyServerNeverTurnsAnExecutionToolIntoARead(): void
+    {
+        $this->transport->tools['demo'][] = ['name' => 'database-query', 'description' => '', 'inputSchema' => ['type' => 'object']];
+        $this->transport->tools['demo'][] = ['name' => 'batch-execute', 'description' => '', 'inputSchema' => ['type' => 'object']];
+        $this->servers->add('demo', true, 'composer', ['read_only' => true]);
+
+        $entries = $this->catalog()->entries();
+        $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
+
+        foreach (['code-runner', 'batch-execute', 'database-query'] as $tool) {
+            self::assertSame(ModeClassifier::WRITE, $byTool[$tool]->mode, $tool . ' runs code or SQL: the declaration does not reach it');
+            self::assertSame(CatalogEntry::ORIGIN_EXECUTION, $byTool[$tool]->modeOrigin);
+            self::assertTrue($byTool[$tool]->irreversible, $tool . ' needs the acknowledgement on the card');
+            self::assertTrue($byTool[$tool]->executionSurface);
+        }
+        self::assertFalse($byTool['product-list']->executionSurface);
+    }
+
+    #[Test]
+    public function aReadOnlyServerStillBelievesTheServersOwnDestructiveAnnotation(): void
+    {
+        $this->servers->add('demo', true, 'composer', ['read_only' => true]);
+
+        $entries = $this->catalog()->entries();
+        $byTool = array_combine(array_map(static fn ($e) => $e->tool, $entries), $entries);
+
+        self::assertSame(ModeClassifier::WRITE, $byTool['stock-get']->mode, 'readOnlyHint false / destructiveHint true count on a read-only server too');
+        self::assertSame(CatalogEntry::ORIGIN_ANNOTATION, $byTool['stock-get']->modeOrigin);
+        self::assertTrue($byTool['stock-get']->irreversible);
+    }
+
+    #[Test]
+    public function anExecutionToolIsAlwaysAnIrreversibleWrite(): void
+    {
+        $this->transport->tools['demo'] = [
+            ['name' => 'code-runner', 'description' => '', 'inputSchema' => ['type' => 'object'],
+                'annotations' => ['readOnlyHint' => true, 'destructiveHint' => false]],
+            ['name' => 'script-repo-list', 'description' => '', 'inputSchema' => ['type' => 'object']],
+        ];
+        $this->servers->add('demo', true);
+
+        [$runner, $scripts] = $this->catalog()->entriesForServer('demo');
+
+        self::assertSame(ModeClassifier::WRITE, $runner->mode, 'a server annotating its code runner read-only is not believed');
+        self::assertTrue($runner->irreversible);
+        self::assertSame(ModeClassifier::WRITE, $scripts->mode, '"script" is an execution word: a listing of runnable scripts goes through the card too');
+        self::assertSame(CatalogEntry::ORIGIN_EXECUTION, $scripts->modeOrigin);
     }
 
     #[Test]

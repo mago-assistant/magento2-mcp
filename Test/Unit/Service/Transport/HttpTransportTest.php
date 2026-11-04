@@ -58,6 +58,19 @@ final class HttpTransportTest extends TestCase
     }
 
     #[Test]
+    public function aResponseDeclaredLargerThanTheCapIsRefusedBeforeItIsRead(): void
+    {
+        $client = $this->client([
+            ...$this->handshake(),
+            $this->json(['jsonrpc' => '2.0', 'id' => 2, 'result' => ['content' => []]], ['content-length: ' . (HttpTransport::BODY_CAP + 1)]),
+        ]);
+
+        $this->expectException(McpException::class);
+        $this->expectExceptionMessage('larger than 8 MB');
+        $client->callTool($this->server(), 'x', []);
+    }
+
+    #[Test]
     public function sendsEmptyArgumentsAsJsonObject(): void
     {
         $client = $this->client([...$this->handshake(), $this->json(['jsonrpc' => '2.0', 'id' => 2, 'result' => ['content' => []]])]);

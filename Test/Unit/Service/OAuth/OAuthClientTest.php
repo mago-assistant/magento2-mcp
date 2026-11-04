@@ -8,6 +8,7 @@ namespace MagoAssistant\Mcp\Test\Unit\Service\OAuth;
 
 use MagoAssistant\Mcp\Service\OAuth\OAuthClient;
 use MagoAssistant\Mcp\Service\OAuth\OAuthException;
+use MagoAssistant\Mcp\Service\Url\EndpointRule;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\MockHttpClient;
@@ -85,6 +86,67 @@ final class OAuthClientTest extends TestCase
         $this->expectException(OAuthException::class);
         $this->expectExceptionMessage('S256');
         $client->discover('https://mcp.example.com/mcp');
+    }
+
+    #[Test]
+    public function refusesMetadataNamingAnotherResource(): void
+    {
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', ['http_code' => 401]),
+            'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json([
+                'resource' => 'https://api.example.com/payments',
+                'authorization_servers' => ['https://auth.example.com'],
+            ]),
+        ]);
+
+        $this->expectException(OAuthException::class);
+        $this->expectExceptionMessage('another resource');
+        $client->discover('https://mcp.example.com/mcp');
+    }
+
+    #[Test]
+    public function acceptsAResourceThatIsTheServersOwnOriginOrPath(): void
+    {
+        foreach (['https://mcp.example.com', 'https://mcp.example.com/', 'https://mcp.example.com/mcp', 'https://MCP.example.com/mcp/'] as $declared) {
+            $client = $this->client([
+                'POST https://mcp.example.com/mcp' => new MockResponse('', ['http_code' => 401]),
+                'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json([
+                    'resource' => $declared, 'authorization_servers' => ['https://auth.example.com'],
+                ]),
+                'GET https://auth.example.com/.well-known/oauth-authorization-server' => $this->json([
+                    'issuer' => 'https://auth.example.com',
+                    'authorization_endpoint' => 'https://auth.example.com/a', 'token_endpoint' => 'https://auth.example.com/t',
+                ]),
+            ]);
+
+            self::assertSame($declared, $client->discover('https://mcp.example.com/mcp')['resource'], $declared);
+        }
+    }
+
+    #[Test]
+    public function refusesAnIssuerMismatchAndPlainHttpEndpoints(): void
+    {
+        $resource = [
+            'POST https://mcp.example.com/mcp' => new MockResponse('', ['http_code' => 401]),
+            'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json(['authorization_servers' => ['https://auth.example.com']]),
+        ];
+        $mismatch = $this->client($resource + ['GET https://auth.example.com/.well-known/oauth-authorization-server' => $this->json([
+            'issuer' => 'https://evil.example.net',
+            'authorization_endpoint' => 'https://auth.example.com/a', 'token_endpoint' => 'https://auth.example.com/t',
+        ])]);
+        try {
+            $mismatch->discover('https://mcp.example.com/mcp');
+            self::fail('expected an issuer refusal');
+        } catch (OAuthException $e) {
+            self::assertStringContainsString('another issuer', $e->getMessage());
+        }
+
+        $plain = $this->client($resource + ['GET https://auth.example.com/.well-known/oauth-authorization-server' => $this->json([
+            'authorization_endpoint' => 'http://auth.example.com/a', 'token_endpoint' => 'https://auth.example.com/t',
+        ])]);
+        $this->expectException(OAuthException::class);
+        $this->expectExceptionMessage('not an https:// URL');
+        $plain->discover('https://mcp.example.com/mcp');
     }
 
     #[Test]
@@ -166,7 +228,7 @@ final class OAuthClientTest extends TestCase
         return new OAuthClient(new MockHttpClient(function (string $method, string $url, array $options) use ($routes): MockResponse {
             $this->requests[] = ['method' => $method, 'url' => $url, 'body' => (string)($options['body'] ?? '')];
             return $routes[$method . ' ' . $url] ?? new MockResponse('', ['http_code' => 404]);
-        }));
+        }), new EndpointRule());
     }
 
     /**

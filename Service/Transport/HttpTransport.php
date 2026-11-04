@@ -23,6 +23,8 @@ class HttpTransport implements TransportInterface
 {
     private const PROTOCOL_VERSION = '2025-06-18';
     private const MAX_PAGES = 10;
+    /** One response body may not exceed this; a remote server that sends more is a fault, not a result. */
+    public const BODY_CAP = 8 * 1024 * 1024;
 
     /** @var array<string, array{session_id: ?string, protocol: string, instructions: string, server_info: array<string,mixed>}> */
     private array $sessions = [];
@@ -184,11 +186,33 @@ class HttpTransport implements TransportInterface
                 'body' => $body,
                 'timeout' => $server->timeout,
                 'max_duration' => $server->timeout,
+                // The body is read whole into memory below; a server may not dictate how much.
+                'on_progress' => static function (int $downloaded, int $total) use ($server): void {
+                    if ($downloaded > self::BODY_CAP || $total > self::BODY_CAP) {
+                        throw new McpException(sprintf(
+                            'MCP server "%s" sent a response larger than %d MB.',
+                            $server->label(),
+                            (int)(self::BODY_CAP / 1048576)
+                        ));
+                    }
+                },
             ]);
             $status = $response->getStatusCode();
             $responseHeaders = $response->getHeaders(false);
+            if ((int)($responseHeaders['content-length'][0] ?? 0) > self::BODY_CAP) {
+                throw new McpException(sprintf(
+                    'MCP server "%s" sent a response larger than %d MB.',
+                    $server->label(),
+                    (int)(self::BODY_CAP / 1048576)
+                ));
+            }
             $content = $response->getContent(false);
+        } catch (McpException $e) {
+            throw $e;
         } catch (\Throwable $e) {
+            if ($e->getPrevious() instanceof McpException) {
+                throw $e->getPrevious();
+            }
             throw new McpException(
                 sprintf('MCP server "%s" request failed: %s', $server->label(), $e->getMessage()),
                 0,

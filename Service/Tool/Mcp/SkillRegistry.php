@@ -7,6 +7,7 @@ declare(strict_types=1);
 namespace MagoAssistant\Mcp\Service\Tool\Mcp;
 
 use MagoAssistant\Mago\Logger\ErrorLogger;
+use MagoAssistant\Mcp\Service\Catalog\DataAcl;
 use MagoAssistant\Mcp\Service\Catalog\ModeClassifier;
 use MagoAssistant\Mcp\Service\Catalog\ToolCatalog;
 
@@ -23,12 +24,20 @@ class SkillRegistry
     /** @var array<int|string,McpSkill[]> skills keyed by name, per admin id ("" for none), once per request */
     private array $skills = [];
 
+    private readonly DataAcl $dataAcl;
+
+    /**
+     * @param DataAcl|null $dataAcl Wired in di.xml (an optional parameter is not auto-injected); the
+     *        defaults when null
+     */
     public function __construct(
         private readonly ToolCatalog $catalog,
         private readonly Executor $executor,
         private readonly ErrorLogger $errorLogger,
-        private readonly ModeClassifier $classifier
+        private readonly ModeClassifier $classifier,
+        ?DataAcl $dataAcl = null
     ) {
+        $this->dataAcl = $dataAcl ?? new DataAcl();
     }
 
     /**
@@ -47,7 +56,8 @@ class SkillRegistry
                     $this->executor,
                     $instructions[$entry->server] ?? '',
                     $this->classifier->isExecutionSurface($entry->tool),
-                    $gate
+                    $gate,
+                    $this->dataAcl
                 );
                 $name = $skill->getName();
                 if (preg_match(self::NAME_PATTERN, $name) !== 1) {
