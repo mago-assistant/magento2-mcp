@@ -217,7 +217,7 @@ $badgeClass = ['read' => 'is-ok', 'write' => 'is-warn', 'execution' => 'is-dange
                             <input id="mago-mcp-read-only" name="read_only" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isChecked('read_only') ? ' checked' : '' ?>/>
                             <label class="admin__field-label" for="mago-mcp-read-only"><span><?= $escaper->escapeHtml(__('Read-only server')) ?></span></label>
                         </div>
-                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('Tools with an unrecognised name run as reads, without the confirmation card. For a server whose tools cannot change anything, such as a documentation lookup. It never reaches a tool that runs code, SQL or commands, deals in credentials, carries a write word (delete, cancel, kill) or is marked destructive by the server itself.')) ?></div>
+                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('Off: a tool whose name does not say whether it reads or changes something is treated as a change, so it shows the confirmation card before it runs. On: such a tool runs at once, without the card. Turn it on only for a server that cannot change anything, such as a documentation lookup. Tools that clearly change something (delete, cancel, kill), run code or commands, or deal in credentials keep their card either way.')) ?></div>
                     </div>
                 </div>
                 <div class="admin__field">
@@ -226,7 +226,7 @@ $badgeClass = ['read' => 'is-ok', 'write' => 'is-warn', 'execution' => 'is-dange
                             <input id="mago-mcp-public" name="output_public" type="checkbox" class="admin__control-checkbox" value="1"<?= $block->isChecked('output_public') ? ' checked' : '' ?>/>
                             <label class="admin__field-label" for="mago-mcp-public"><span><?= $escaper->escapeHtml(__('Public output')) ?></span></label>
                         </div>
-                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('Results go to the AI provider as data. Only for a server that never returns personal data; otherwise each result is one text string that Mago\'s privacy scrub runs over. Credentials are masked either way.')) ?></div>
+                        <div class="admin__field-note"><?= $escaper->escapeHtml(__('Off: before a result goes to the AI, Mago hides personal details in it, so an email or phone number becomes a placeholder. On: nothing is hidden and the AI sees the result exactly as the server sent it. Keep it off for a server that returns customer or order data; turn it on only for one whose answers contain no people, such as a documentation lookup. Passwords and keys are hidden on both settings.')) ?></div>
                     </div>
                 </div>
             </fieldset>

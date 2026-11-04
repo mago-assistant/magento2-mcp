@@ -90,8 +90,11 @@ connection; Add Server, Rescan and Refresh Tool Lists are the toolbar buttons.
 of checkboxes in three groups, reads, writes, and execution and credential tools. A ticked tool is
 exposed as a skill; an unticked one is not a skill for anyone. Each row shows the tool's type, the
 Magento resource a role needs for it, its first sentence, and a link to its Skills & Permissions page.
-The dangerous group starts unticked. Below the tools come the trust settings (read-only, public output)
-and, on an OAuth server, your own connection; the actions are at the bottom, as on Mago's pages.
+The dangerous group starts unticked. Below the tools come the trust settings: **read-only** (tools with
+an unrecognised name run without the confirmation card) and **public output** (off: personal details
+such as emails and phone numbers are hidden before a result goes to the AI; on: the AI sees the result
+as the server sent it, so only for a server whose answers contain no people). On an OAuth server your
+own connection follows; the actions are at the bottom, as on Mago's pages.
 
 **Add server** opens the same page for a remote server with a connection section: label, URL,
 authentication, bearer token, timeout, the skill it replaces, enabled. The name is derived from the label
@@ -276,6 +279,10 @@ the tool name (`Getting order...`) as the status line.
 
 ## Read-only servers
 
+In plain terms: a tool whose name does not say whether it reads or changes something is treated as a
+change and shows the confirmation card; on a read-only server such a tool runs at once. Tools that
+clearly change something, run code or deal in credentials keep their card either way.
+
 An administrator can declare a server **read-only** on its edit page. Every tool of that server whose
 name the classifier below would have judged is then a `read` (shown as `read (server)` in
 `mago:mcp:list`), runs without the confirmation card, and is never flagged irreversible. Use it for a
@@ -412,7 +419,8 @@ arguments say. Grant both to few roles.
 
 A tool's result reaches the model in one of two shapes, chosen by the server row's **output public**
 flag, one of the trust settings an administrator sets on the edit page (a module definition can set its
-starting value with `outputPublic`):
+starting value with `outputPublic`). In plain terms: off hides personal details before the result goes
+to the AI, on sends the result as the server returned it. Credentials are masked on both settings.
 
 - **Not public** (the default, and the right setting for a local server that returns customer data):
   the result is one text string, declared public so Mago's heuristic scrub and vault concealment run

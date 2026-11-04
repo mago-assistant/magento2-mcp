@@ -100,8 +100,9 @@ addon and a remote (HTTP with OAuth) addon; `MERGE.md` explains how and why.
   connected their own account.
 - **Read-only servers**: an administrator can declare a server read-only, so its tools run without the
   confirmation card.
-- **Public output**: a server marked public sends structured results to the model as data; otherwise
-  each result is one string Mago's privacy scrub runs over.
+- **Public output**: a server marked public sends structured results to the model as data, with no
+  privacy scrub; otherwise each result is one string in which Mago hides personal details (emails,
+  phone numbers, known vault values) before it goes to the model.
 - **Module definitions**: any module ships a server as a `ServerDefinition` in `di.xml`, with allowed
   tools, per-tool privacy overrides, error hints and a skill it replaces.
 - `${VAR}` placeholders in `.mcp.json` bearer headers are read from the environment.
