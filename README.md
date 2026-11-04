@@ -102,9 +102,21 @@ its connection details as text. **Delete** is offered on rows added here;
 it removes every admin's OAuth tokens and the client registration with the row, and so does changing an
 OAuth server's URL, whether on the form or through a rescan of its source.
 
-Once a server is enabled, each of its tools appears as its own row, `mcp_<server>__<tool>`, in
+Once a server is enabled, each of its ticked tools appears as its own row, `mcp_<server>__<tool>`, in
 **Stores > Admin Assistant > Skills & Permissions** beside Mago's own skills, with Mago's own per-user
 permission controls.
+
+### Tools versus Skills & Permissions
+
+Think of a building. The **Tools** list on a server's page decides which doors exist: an unticked tool
+has no door, nobody can use it whatever their role, and the assistant is never told about it. You set
+that once per server. **Skills & Permissions** decides who gets a key to each door that exists: per
+admin user, read or write or disabled, falling back to the role's grants (`MCP Tools - Read`, `- Write`,
+`- Execute`, and the Magento resource for the tool's data) when nothing is set for that user.
+
+So untick a tool on the server page when nobody should ever have it, and use Skills & Permissions when
+the tool should exist but only for some people. The Permissions link on each tool row takes you from the
+first page to the second. Execution and credential tools start unticked.
 
 From the CLI:
 

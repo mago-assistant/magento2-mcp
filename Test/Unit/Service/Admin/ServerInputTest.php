@@ -152,7 +152,22 @@ final class ServerInputTest extends TestCase
             $result,
             'the allowed-tool list is a trust setting: it keeps a discovered server\'s code runner out of the catalog'
         );
-        self::assertSame([], ServerInput::validateTrust([])['allowed_tools'], 'absent means every tool');
+        self::assertSame([], ServerInput::validateTrust([])['allowed_tools'], 'absent means every tool but the withheld ones');
+    }
+
+    #[Test]
+    public function theToolCheckboxesPostAnArrayOfNames(): void
+    {
+        $result = ServerInput::validateTrust([
+            'allowed_tools' => ['product-list', ' order-get ', 'product-list', '', ['nested' => 'ignored'], 'code-runner'],
+        ]);
+
+        self::assertSame(
+            ['product-list', 'order-get', 'code-runner'],
+            $result['allowed_tools'],
+            'trimmed, de-duplicated, non-scalars dropped; a ticked execution tool is simply on the list'
+        );
+        self::assertSame([], ServerInput::validateTrust(['allowed_tools' => []])['allowed_tools'], 'nothing ticked is the empty list');
     }
 
     #[Test]
