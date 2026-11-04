@@ -1,0 +1,16 @@
+parameters:
+    level: 8
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false
+    paths:
+        - .
+    excludePaths:
+        - Test/*
+        - vendor/*
+    ignoreErrors:
+        # Magento's interfaces declare fewer methods than the classes DI hands out (magic getters, page results).
+        - '#^Call to an undefined method .*Interface::.*\(\)\.$#'
+        - '#^Call to an undefined method Magento\\Framework\\View\\Result\\Page::setActiveMenu\(\)\.$#'
+        # The backend session forwards getData/setData to its storage through __call.
+        - '#^Call to an undefined method Magento\\Backend\\Model\\Session::(get|set)Data\(\)\.$#'
+        - identifier: missingType.iterableValue

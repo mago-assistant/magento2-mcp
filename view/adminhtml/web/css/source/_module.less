@@ -1,0 +1,21 @@
+//
+//  MagoAssistant_Mcp admin styles
+//  _____________________________________________
+
+//
+//  Listings without a toolbar
+//  _____________________________________________
+
+//  The servers listing, like Mago's skills listing, has no toolbar. The Mage-OS admin theme draws a
+//  grid as one card whose rounded top corners and top padding belong to the toolbar's filter row, so
+//  without a toolbar the table starts flush against a square edge. Give the card its top back on
+//  both pages. The values are the theme's own (@radius__l, @indent__l), written out because the
+//  stock Magento/backend theme has no @radius__l and never reaches this rule.
+
+body.m137-admin-theme.mago_mcp-servers-index,
+body.m137-admin-theme.mago-skills-index {
+    .admin__data-grid-wrap[data-role='grid-wrapper'] {
+        border-radius: 24px;
+        padding-top: 2.4rem;
+    }
+}

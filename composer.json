@@ -1,0 +1,87 @@
+{
+    "name": "mago-assistant/magento2-mcp",
+    "description": "Mago Assistant addon: every tool of an installed MCP server becomes a Mago skill",
+    "type": "magento2-module",
+    "version": "1.0.0",
+    "license": "MIT",
+    "keywords": [
+        "magento",
+        "magento2",
+        "mage-os",
+        "mago",
+        "mago-assistant",
+        "mcp",
+        "model-context-protocol",
+        "ai",
+        "assistant"
+    ],
+    "homepage": "https://github.com/mago-assistant/magento2-mcp",
+    "support": {
+        "issues": "https://github.com/mago-assistant/magento2-mcp/issues",
+        "source": "https://github.com/mago-assistant/magento2-mcp"
+    },
+    "authors": [
+        {
+            "name": "Mago Assistant",
+            "homepage": "https://github.com/mago-assistant"
+        }
+    ],
+    "require": {
+        "php": "~8.2.0||~8.3.0||~8.4.0||~8.5.0",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "magento/framework": "^103.0",
+        "magento/module-backend": "*",
+        "magento/module-config": "*",
+        "magento/module-store": "*",
+        "mago-assistant/mago": "*",
+        "symfony/console": "^6.4 || ^7.0",
+        "symfony/http-client": "^6.4 || ^7.0 || ^8.0",
+        "symfony/process": "^6.4 || ^7.0"
+    },
+    "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "magento/magento-coding-standard": "*",
+        "phpstan/phpstan": "^1.12 || ^2.0",
+        "phpunit/phpunit": "^10.5 || ^11.0 || ^12.0",
+        "psr/log": "^1.1 || ^2.0 || ^3.0"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "MagoAssistant\\Mcp\\": ""
+        },
+        "exclude-from-classmap": [
+            "/Test/"
+        ]
+    },
+    "scripts": {
+        "test": "phpunit",
+        "lint": "phpcs --standard=phpcs.xml .",
+        "lint-fix": "phpcbf --standard=phpcs.xml .",
+        "analyse": "phpstan analyse -c phpstan.neon.dist"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "mage-os/composer-dependency-version-audit-plugin": true,
+            "magento/composer-dependency-version-audit-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/mago-assistant/mago",
+            "no-api": true
+        },
+        {
+            "type": "composer",
+            "url": "https://repo.mage-os.org/"
+        }
+    ]
+}
