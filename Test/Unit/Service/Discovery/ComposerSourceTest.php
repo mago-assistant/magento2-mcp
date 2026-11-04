@@ -10,6 +10,7 @@ use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Filesystem\Driver\File;
 use MagoAssistant\Mcp\Service\Discovery\ComposerSource;
 use MagoAssistant\Mcp\Service\Discovery\DiscoveredServer;
+use MagoAssistant\Mcp\Service\Discovery\ServerMerger;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -80,6 +81,28 @@ final class ComposerSourceTest extends TestCase
         self::assertCount(1, $servers, 'only binaries that exist in vendor/bin count');
         self::assertSame('widget', $servers[0]->name);
         self::assertSame(['php', 'vendor/bin/widget-mcp'], $servers[0]->command);
+    }
+
+    #[Test]
+    public function aVendorServerStartsReadOnlyWithThePrivacyFilterOnAndDisabled(): void
+    {
+        touch($this->root . '/vendor/bin/widget-mcp');
+        $this->installed([
+            ['name' => 'acme/magento-widget', 'bin' => ['bin/widget-mcp']],
+            ['name' => 'acme/shipping', 'extra' => ['mago-mcp' => ['command' => ['php', 'bin/ship-mcp']]]],
+        ]);
+
+        $servers = $this->source()->discover();
+        $plan = (new ServerMerger())->plan([], $servers);
+
+        self::assertCount(2, $plan['insert'], 'both are new rows');
+        foreach ($plan['insert'] as $server) {
+            $row = $server->toRow() + ['enabled' => false];
+            self::assertTrue($row['read_only'], $server->name . ': only its read tools are exposed until an admin unticks read-only');
+            self::assertFalse($row['output_public'], $server->name . ': the privacy filter is on');
+            self::assertSame([], $row['allowed_tools'], $server->name . ': no list, so every read and nothing dangerous');
+            self::assertFalse($row['enabled'], $server->name . ': and the row waits for an admin to enable it');
+        }
     }
 
     #[Test]

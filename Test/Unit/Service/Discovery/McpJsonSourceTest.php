@@ -69,6 +69,10 @@ final class McpJsonSourceTest extends TestCase
         self::assertSame(['K' => 'v'], $servers[1]->env);
         self::assertSame('http', $servers[2]->transport);
         self::assertSame([], $this->log->entries);
+        foreach ($servers as $server) {
+            self::assertTrue($server->readOnly, $server->name . ' starts read-only, stdio or http');
+            self::assertFalse($server->outputPublic, $server->name . ' starts with the privacy filter on');
+        }
     }
 
     #[Test]
