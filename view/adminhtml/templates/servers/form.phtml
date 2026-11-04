@@ -147,7 +147,7 @@ $badgeClass = ['read' => 'is-ok', 'write' => 'is-warn', 'execution' => 'is-dange
                 <table class="data-grid">
                     <thead>
                         <tr>
-                            <th class="data-grid-th data-grid-checkbox-cell"><?= $escaper->escapeHtml(__('Exposed')) ?></th>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Exposed')) ?></th>
                             <th class="data-grid-th"><?= $escaper->escapeHtml(__('Tool')) ?></th>
                             <th class="data-grid-th"><?= $escaper->escapeHtml(__('Type')) ?></th>
                             <th class="data-grid-th"><?= $escaper->escapeHtml(__('Needs')) ?></th>
@@ -169,7 +169,7 @@ $badgeClass = ['read' => 'is-ok', 'write' => 'is-warn', 'execution' => 'is-dange
                             </tr>
                         <?php endif; ?>
                         <tr>
-                            <td class="data-grid-td data-grid-checkbox-cell">
+                            <td class="data-grid-td">
                                 <div class="admin__field-option">
                                     <input type="checkbox" class="admin__control-checkbox" name="allowed_tools[]"
                                            id="mago-mcp-tool-<?= $escaper->escapeHtmlAttr($tool['skill']) ?>"
