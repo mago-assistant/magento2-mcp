@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
+    <module name="MagoAssistant_Mcp">
+        <sequence>
+            <module name="MagoAssistant_Mago"/>
+            <module name="Magento_Backend"/>
+            <module name="Magento_Config"/>
+            <module name="Magento_Store"/>
+            <!-- mago_mcp_token has a foreign key to admin_user. -->
+            <module name="Magento_User"/>
+        </sequence>
+    </module>
+</config>

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<listing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+
+    <argument name="data" xsi:type="array">
+        <item name="js_config" xsi:type="array">
+            <item name="provider" xsi:type="string">mago_mcp_servers_listing.mago_mcp_servers_listing_data_source</item>
+        </item>
+    </argument>
+
+    <settings>
+        <buttons>
+            <button name="add">
+                <url path="mago_mcp/servers/new"/>
+                <class>primary</class>
+                <label translate="true">Add Server</label>
+            </button>
+            <button name="rescan">
+                <url path="mago_mcp/servers/rescan"/>
+                <label translate="true">Rescan</label>
+            </button>
+            <button name="refresh">
+                <url path="mago_mcp/servers/refresh"/>
+                <label translate="true">Refresh Tool Lists</label>
+            </button>
+        </buttons>
+        <spinner>mago_mcp_servers_columns</spinner>
+        <deps>
+            <dep>mago_mcp_servers_listing.mago_mcp_servers_listing_data_source</dep>
+        </deps>
+    </settings>
+
+    <dataSource name="mago_mcp_servers_listing_data_source" component="Magento_Ui/js/grid/provider">
+        <settings>
+            <storageConfig>
+                <param name="dataScope" xsi:type="string">data</param>
+                <param name="cacheRequests" xsi:type="boolean">false</param>
+            </storageConfig>
+            <updateUrl path="mui/index/render"/>
+        </settings>
+        <aclResource>MagoAssistant_Mcp::manage</aclResource>
+        <dataProvider class="MagoAssistant\Mcp\Ui\DataProvider\ServersDataProvider" name="mago_mcp_servers_listing_data_source">
+            <settings>
+                <requestFieldName>name</requestFieldName>
+                <primaryFieldName>name</primaryFieldName>
+            </settings>
+        </dataProvider>
+    </dataSource>
+
+    <columns name="mago_mcp_servers_columns">
+        <column name="name" sortOrder="10">
+            <settings>
+                <label translate="true">Name</label>
+                <filter>text</filter>
+                <sorting>asc</sorting>
+            </settings>
+        </column>
+        <column name="label" sortOrder="20">
+            <settings>
+                <label translate="true">Label</label>
+                <filter>text</filter>
+            </settings>
+        </column>
+        <column name="source" sortOrder="30" component="MagoAssistant_Mago/js/grid/columns/badge">
+            <settings>
+                <label translate="true">Source</label>
+                <filter>select</filter>
+                <options class="MagoAssistant\Mcp\Ui\Source\Source"/>
+                <dataType>select</dataType>
+            </settings>
+        </column>
+        <column name="transport" sortOrder="40" component="MagoAssistant_Mago/js/grid/columns/badge">
+            <settings>
+                <label translate="true">Transport</label>
+                <filter>select</filter>
+                <options class="MagoAssistant\Mcp\Ui\Source\Transport"/>
+                <dataType>select</dataType>
+            </settings>
+        </column>
+        <column name="auth_type" sortOrder="50" component="MagoAssistant_Mago/js/grid/columns/badge">
+            <settings>
+                <label translate="true">Auth</label>
+                <filter>select</filter>
+                <options class="MagoAssistant\Mcp\Ui\Source\AuthType"/>
+                <dataType>select</dataType>
+            </settings>
+        </column>
+        <column name="endpoint" sortOrder="60">
+            <settings>
+                <label translate="true">Command or URL</label>
+                <filter>text</filter>
+                <sortable>false</sortable>
+            </settings>
+        </column>
+        <column name="enabled" sortOrder="70" component="Magento_Ui/js/grid/columns/select">
+            <settings>
+                <label translate="true">Enabled</label>
+                <filter>select</filter>
+                <options class="Magento\Config\Model\Config\Source\Yesno"/>
+                <dataType>select</dataType>
+            </settings>
+        </column>
+        <column name="tools" sortOrder="80">
+            <settings>
+                <label translate="true">Tools</label>
+                <sortable>false</sortable>
+            </settings>
+        </column>
+        <column name="status" sortOrder="90">
+            <settings>
+                <label translate="true">Status</label>
+                <filter>text</filter>
+                <sortable>false</sortable>
+            </settings>
+        </column>
+        <actionsColumn name="actions" class="MagoAssistant\Mcp\Ui\Component\Listing\Column\ServerActions" sortOrder="100">
+            <settings>
+                <label translate="true">Actions</label>
+                <indexField>name</indexField>
+            </settings>
+        </actionsColumn>
+    </columns>
+</listing>
