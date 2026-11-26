@@ -23,8 +23,16 @@
     <type name="MagoAssistant\Mcp\Service\OAuth\OAuthClient">
         <arguments>
             <argument name="httpClient" xsi:type="object">MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient</argument>
+            <argument name="publicOnlyHttpClient" xsi:type="object">MagoAssistant\Mcp\Service\Transport\PublicOnlyHttpClient</argument>
         </arguments>
     </type>
+    <!-- The same client behind Symfony's guard: it refuses an address in a private, loopback or link-local
+         range at connect time and on every redirect. OAuthClient uses it for hosts a remote server names. -->
+    <virtualType name="MagoAssistant\Mcp\Service\Transport\PublicOnlyHttpClient" type="Symfony\Component\HttpClient\NoPrivateNetworkHttpClient">
+        <arguments>
+            <argument name="client" xsi:type="object">MagoAssistant\Mcp\Service\Transport\SymfonyHttpClient</argument>
+        </arguments>
+    </virtualType>
     <!-- The backend session is touched only when an OAuth request needs it. -->
     <type name="MagoAssistant\Mcp\Service\OAuth\PendingAuthorizationStore">
         <arguments>

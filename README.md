@@ -461,7 +461,9 @@ Magento server can reach, including internal ones. A remote server is a third pa
 it public, one message from it may not exceed 8 MB, and the text it supplies about itself (its
 initialize instructions, a tool's description) goes to the model fenced as server-supplied data, capped,
 with a forged closing marker defused. For an OAuth server, the metadata it points the admin at must name
-the server itself as the resource, an issuer that matches, and `https://` endpoints.
+the server itself as the resource, an issuer that matches, and `https://` endpoints. The hosts such a
+server names during the OAuth handshake are requested only when they are public: a remote server cannot
+point this install at an address inside the shop's own network, directly or through a redirect.
 
 **Prompt injection** is the open edge. Text a shopper typed, an order comment, an address line, a
 review, a product question, reaches the model inside a tool result wrapped in Mago's `tool_output`

@@ -35,6 +35,16 @@ class EndpointRule
         return null;
     }
 
+    /**
+     * Whether the URL's host is one of the local names plain http:// is allowed for.
+     */
+    public function isLocalUrl(string $url): bool
+    {
+        $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+
+        return $host !== '' && $this->isLocal($host);
+    }
+
     private function isLocal(string $host): bool
     {
         if (in_array($host, self::LOCAL_HOSTS, true)) {

@@ -83,6 +83,16 @@ need new grants.
   origin, an `issuer` in the authorization server metadata must match the server named, and every
   endpoint must be `https://` (or `http://` on a local host). Before, a server could have the admin consent
   to a token for a different resource at the same authorization server.
+- **A remote OAuth server cannot make the shop request hosts inside its own network.** The metadata URL
+  in `WWW-Authenticate`, the authorization server and its registration and token endpoints are named by
+  the MCP server, not by the administrator. For a server that is not on a local host, a request to its
+  own origin no longer follows redirects, and every other host it names must be a public name and goes
+  through Symfony's `NoPrivateNetworkHttpClient`, which refuses private, loopback and link-local
+  addresses when it connects and on every redirect. A metadata hint or authorization server that is not
+  an `https://` URL is not requested at all. A server on a local host (`localhost`, `*.test`,
+  `*.internal` ...) behaves as before. An `https://` server on a private address whose authorization
+  server is a different private host can no longer connect. Requires `symfony/http-foundation`, which
+  Magento already installs.
 
 ### Fixed
 

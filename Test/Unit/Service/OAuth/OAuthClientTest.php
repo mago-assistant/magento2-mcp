@@ -11,6 +11,7 @@ use MagoAssistant\Mcp\Service\OAuth\OAuthException;
 use MagoAssistant\Mcp\Service\Url\EndpointRule;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -25,7 +26,7 @@ final class OAuthClientTest extends TestCase
     ];
     private const CLIENT = ['client_id' => 'client-1', 'client_secret' => null];
 
-    /** @var array<int, array{method: string, url: string, body: string}> */
+    /** @var array<int, array{method: string, url: string, body: string, via: string, max_redirects: ?int}> */
     private array $requests = [];
 
     #[Test]
@@ -223,12 +224,244 @@ final class OAuthClientTest extends TestCase
     /**
      * @param array<string, MockResponse> $routes "METHOD url" => response
      */
+    #[Test]
+    public function aPublicServerReachesOtherHostsOnlyThroughThePublicOnlyClient(): void
+    {
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', [
+                'http_code' => 401,
+                'response_headers' => ['www-authenticate: Bearer resource_metadata="https://meta.example.net/prm"'],
+            ]),
+            'GET https://meta.example.net/prm' => $this->json(['authorization_servers' => ['https://auth.example.com']]),
+            'GET https://auth.example.com/.well-known/oauth-authorization-server' => $this->json([
+                'authorization_endpoint' => 'https://auth.example.com/a',
+                'token_endpoint' => 'https://auth.example.com/t',
+                'registration_endpoint' => 'https://auth.example.com/r',
+            ]),
+            'POST https://auth.example.com/r' => $this->json(['client_id' => 'c']),
+            'POST https://auth.example.com/t' => $this->json(['access_token' => 'at']),
+        ]);
+
+        $metadata = $client->discover('https://mcp.example.com/mcp');
+        $client->register($metadata, 'https://shop.example/callback', 'Shop');
+        $client->exchangeCode($metadata, self::CLIENT, 'code', 'verifier', 'https://shop.example/callback');
+
+        self::assertSame([
+            'https://mcp.example.com/mcp' => 'plain',
+            'https://meta.example.net/prm' => 'public-only',
+            'https://auth.example.com/.well-known/oauth-authorization-server' => 'public-only',
+            'https://auth.example.com/r' => 'public-only',
+            'https://auth.example.com/t' => 'public-only',
+        ], $this->via());
+    }
+
+    #[Test]
+    public function aPublicServersOwnOriginIsAskedWithoutFollowingRedirects(): void
+    {
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', ['http_code' => 401]),
+            'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json([
+                'authorization_servers' => ['https://mcp.example.com'],
+            ]),
+            'GET https://mcp.example.com/.well-known/oauth-authorization-server' => $this->json([
+                'authorization_endpoint' => 'https://mcp.example.com/a',
+                'token_endpoint' => 'https://mcp.example.com/t',
+            ]),
+        ]);
+
+        $client->discover('https://mcp.example.com/mcp');
+
+        self::assertSame(['plain'], array_values(array_unique(array_column($this->requests, 'via'))));
+        self::assertSame([0], array_values(array_unique(array_column($this->requests, 'max_redirects'))));
+    }
+
+    #[Test]
+    public function anotherPortOfThePublicServersHostIsAnotherHost(): void
+    {
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', [
+                'http_code' => 401,
+                'response_headers' => ['www-authenticate: Bearer resource_metadata="https://mcp.example.com:9200/prm"'],
+            ]),
+            'GET https://mcp.example.com:9200/prm' => $this->json(['authorization_servers' => ['https://auth.example.com']]),
+            'GET https://auth.example.com/.well-known/oauth-authorization-server' => $this->json([
+                'authorization_endpoint' => 'https://auth.example.com/a',
+                'token_endpoint' => 'https://auth.example.com/t',
+            ]),
+        ]);
+
+        $client->discover('https://mcp.example.com/mcp');
+
+        self::assertSame('public-only', $this->via()['https://mcp.example.com:9200/prm']);
+    }
+
+    #[Test]
+    public function aMetadataHintThatIsNotAnEndpointIsNeverRequested(): void
+    {
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', [
+                'http_code' => 401,
+                'response_headers' => ['www-authenticate: Bearer resource_metadata="http://169.254.169.254/latest/meta-data/"'],
+            ]),
+            'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json([
+                'authorization_servers' => ['https://auth.example.com'],
+            ]),
+            'GET https://auth.example.com/.well-known/oauth-authorization-server' => $this->json([
+                'authorization_endpoint' => 'https://auth.example.com/a',
+                'token_endpoint' => 'https://auth.example.com/t',
+            ]),
+        ]);
+
+        $client->discover('https://mcp.example.com/mcp');
+
+        self::assertArrayNotHasKey('http://169.254.169.254/latest/meta-data/', $this->via());
+    }
+
+    #[Test]
+    public function aHintThePublicOnlyClientRefusesFallsBackToTheServersOwnWellKnownLocation(): void
+    {
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', [
+                'http_code' => 401,
+                'response_headers' => ['www-authenticate: Bearer resource_metadata="https://intranet.example.net/prm"'],
+            ]),
+            'GET https://intranet.example.net/prm' => new TransportException('Host "intranet.example.net" is blocked.'),
+            'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json([
+                'authorization_servers' => ['https://auth.example.com'],
+            ]),
+            'GET https://auth.example.com/.well-known/oauth-authorization-server' => $this->json([
+                'authorization_endpoint' => 'https://auth.example.com/a',
+                'token_endpoint' => 'https://auth.example.com/t',
+            ]),
+        ]);
+
+        self::assertSame('https://auth.example.com/t', $client->discover('https://mcp.example.com/mcp')['token_endpoint']);
+    }
+
+    #[Test]
+    public function refusesAnAuthorizationServerThePublicOnlyClientRefuses(): void
+    {
+        $blocked = new TransportException('Host "auth.internal.example.net" is blocked.');
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', ['http_code' => 401]),
+            'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json([
+                'authorization_servers' => ['https://auth.internal.example.net'],
+            ]),
+            'GET https://auth.internal.example.net/.well-known/oauth-authorization-server' => $blocked,
+            'GET https://auth.internal.example.net/.well-known/openid-configuration' => $blocked,
+        ]);
+
+        $this->expectException(OAuthException::class);
+        $this->expectExceptionMessage('No OAuth metadata found');
+        $client->discover('https://mcp.example.com/mcp');
+    }
+
+    #[Test]
+    public function refusesAnAuthorizationServerThatIsNotAnEndpoint(): void
+    {
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', ['http_code' => 401]),
+            'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json([
+                'authorization_servers' => ['http://10.0.0.5:8500'],
+            ]),
+        ]);
+
+        try {
+            $client->discover('https://mcp.example.com/mcp');
+            self::fail('Expected an OAuthException.');
+        } catch (OAuthException $e) {
+            self::assertStringContainsString('authorization server', $e->getMessage());
+        }
+        self::assertSame(
+            [],
+            array_filter(array_keys($this->via()), static fn (string $url): bool => str_contains($url, '10.0.0.5'))
+        );
+    }
+
+    #[Test]
+    public function aPublicServerMayNotNameALocalName(): void
+    {
+        $client = $this->client([
+            'POST https://mcp.example.com/mcp' => new MockResponse('', ['http_code' => 401]),
+            'GET https://mcp.example.com/.well-known/oauth-protected-resource/mcp' => $this->json([
+                'authorization_servers' => ['https://opensearch:9200'],
+            ]),
+            'GET https://opensearch:9200/.well-known/oauth-authorization-server' => $this->json([
+                'authorization_endpoint' => 'https://opensearch:9200/a',
+                'token_endpoint' => 'https://opensearch:9200/t',
+            ]),
+        ]);
+
+        try {
+            $client->discover('https://mcp.example.com/mcp');
+            self::fail('Expected an OAuthException.');
+        } catch (OAuthException) {
+            self::assertSame(
+                [],
+                array_filter(array_keys($this->via()), static fn (string $url): bool => str_contains($url, 'opensearch'))
+            );
+        }
+    }
+
+    #[Test]
+    public function aLocalServerMayNameLocalHosts(): void
+    {
+        $client = $this->client([
+            'POST http://mcp.test/mcp' => new MockResponse('', ['http_code' => 401]),
+            'GET http://mcp.test/.well-known/oauth-protected-resource/mcp' => $this->json([
+                'authorization_servers' => ['http://auth.test'],
+            ]),
+            'GET http://auth.test/.well-known/oauth-authorization-server' => $this->json([
+                'authorization_endpoint' => 'http://auth.test/a',
+                'token_endpoint' => 'http://auth.test/t',
+            ]),
+            'POST http://auth.test/t' => $this->json(['access_token' => 'at']),
+        ]);
+
+        $metadata = $client->discover('http://mcp.test/mcp');
+        $client->exchangeCode($metadata, self::CLIENT, 'code', 'verifier', 'http://shop.test/callback');
+
+        self::assertSame(['plain'], array_values(array_unique(array_column($this->requests, 'via'))));
+        self::assertSame([null], array_values(array_unique(array_column($this->requests, 'max_redirects'))));
+    }
+
     private function client(array $routes): OAuthClient
     {
-        return new OAuthClient(new MockHttpClient(function (string $method, string $url, array $options) use ($routes): MockResponse {
-            $this->requests[] = ['method' => $method, 'url' => $url, 'body' => (string)($options['body'] ?? '')];
-            return $routes[$method . ' ' . $url] ?? new MockResponse('', ['http_code' => 404]);
-        }), new EndpointRule());
+        return new OAuthClient(
+            new MockHttpClient($this->recorder($routes, 'plain')),
+            new EndpointRule(),
+            new MockHttpClient($this->recorder($routes, 'public-only'))
+        );
+    }
+
+    /**
+     * @param array<string, MockResponse|\Throwable> $routes
+     */
+    private function recorder(array $routes, string $via): \Closure
+    {
+        return function (string $method, string $url, array $options) use ($routes, $via): MockResponse {
+            $this->requests[] = [
+                'method' => $method,
+                'url' => $url,
+                'body' => (string)($options['body'] ?? ''),
+                'via' => $via,
+                'max_redirects' => $options['max_redirects'] ?? null,
+            ];
+            $route = $routes[$method . ' ' . $url] ?? new MockResponse('', ['http_code' => 404]);
+            if ($route instanceof \Throwable) {
+                throw $route;
+            }
+
+            return $route;
+        };
+    }
+
+    /**
+     * @return array<string, string> url => the client it went through
+     */
+    private function via(): array
+    {
+        return array_column($this->requests, 'via', 'url');
     }
 
     /**

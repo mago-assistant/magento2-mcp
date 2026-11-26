@@ -7,12 +7,18 @@ declare(strict_types=1);
 namespace MagoAssistant\Mcp\Service\OAuth;
 
 use MagoAssistant\Mcp\Service\Url\EndpointRule;
+use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface as HttpExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\HttpClient\ResponseInterface;
 
 /**
  * OAuth 2.1 as the MCP authorization spec uses it: protected resource metadata (RFC 9728), authorization
  * server metadata (RFC 8414), dynamic client registration (RFC 7591), PKCE and resource indicators (RFC 8707).
+ *
+ * Most URLs requested here are named by the MCP server's answers, not by the administrator. Which client
+ * such a request goes through is decided in send(): a server on the public internet can only make this
+ * install talk to its own origin and to other public hosts, never to a host inside the shop's network.
  */
 class OAuthClient
 {
@@ -20,7 +26,8 @@ class OAuthClient
 
     public function __construct(
         private readonly HttpClientInterface $httpClient,
-        private readonly EndpointRule $endpointRule
+        private readonly EndpointRule $endpointRule,
+        private readonly HttpClientInterface $publicOnlyHttpClient
     ) {
     }
 
@@ -48,9 +55,13 @@ class OAuthClient
         if (!is_string($issuer) || $issuer === '') {
             throw new OAuthException('The MCP server does not name an authorization server.');
         }
+        if ($this->endpointRule->error($issuer) !== null) {
+            throw new OAuthException('The authorization server the MCP server names is not an https:// URL.');
+        }
 
         $serverMetadata = $this->firstJson(
-            $this->wellKnownUrls($issuer, ['oauth-authorization-server', 'openid-configuration'])
+            $this->wellKnownUrls($issuer, ['oauth-authorization-server', 'openid-configuration']),
+            $serverUrl
         );
         foreach (['authorization_endpoint', 'token_endpoint'] as $required) {
             if (!is_string($serverMetadata[$required] ?? null)) {
@@ -125,7 +136,7 @@ class OAuthClient
             throw new OAuthException('The authorization server does not support dynamic client registration.');
         }
 
-        $response = $this->request('POST', $metadata['registration_endpoint'], ['json' => [
+        $response = $this->request('POST', $metadata['registration_endpoint'], $metadata['resource'] ?? '', ['json' => [
             'client_name' => $clientName,
             'redirect_uris' => [$redirectUri],
             'grant_types' => ['authorization_code', 'refresh_token'],
@@ -228,7 +239,7 @@ class OAuthClient
             $body['resource'] = $metadata['resource'];
         }
 
-        $response = $this->request('POST', $metadata['token_endpoint'], ['body' => $body]);
+        $response = $this->request('POST', $metadata['token_endpoint'], $metadata['resource'] ?? '', ['body' => $body]);
         if (!is_string($response['access_token'] ?? null) || $response['access_token'] === '') {
             throw new OAuthException('The token endpoint returned no access token.');
         }
@@ -250,20 +261,26 @@ class OAuthClient
         $urls = [];
         // An unauthenticated request makes the server point at its metadata in WWW-Authenticate.
         try {
-            $response = $this->httpClient->request('POST', $serverUrl, [
+            $response = $this->send('POST', $serverUrl, $serverUrl, [
                 'headers' => ['Content-Type' => 'application/json', 'Accept' => 'application/json, text/event-stream'],
                 'body' => '{"jsonrpc":"2.0","id":1,"method":"ping"}',
-                'timeout' => self::TIMEOUT,
             ]);
             $header = implode(', ', $response->getHeaders(false)['www-authenticate'] ?? []);
-            if (preg_match('/resource_metadata="([^"]+)"/', $header, $match)) {
+            // The hint is the server's word; one that is not an endpoint (plain http to a remote host,
+            // another scheme) is not asked at all.
+            if (preg_match('/resource_metadata="([^"]+)"/', $header, $match)
+                && $this->endpointRule->error($match[1]) === null
+            ) {
                 $urls[] = $match[1];
             }
         } catch (HttpExceptionInterface $e) {
             throw new OAuthException('The MCP server is unreachable: ' . $e->getMessage(), 0, $e);
         }
 
-        return $this->firstJson([...$urls, ...$this->wellKnownUrls($serverUrl, ['oauth-protected-resource'])]);
+        return $this->firstJson(
+            [...$urls, ...$this->wellKnownUrls($serverUrl, ['oauth-protected-resource'])],
+            $serverUrl
+        );
     }
 
     /**
@@ -293,17 +310,15 @@ class OAuthClient
 
     /**
      * @param string[] $urls
+     * @param string $serverUrl The MCP server these URLs were derived from
      * @return array<string, mixed>
      * @throws OAuthException
      */
-    private function firstJson(array $urls): array
+    private function firstJson(array $urls, string $serverUrl): array
     {
         foreach ($urls as $url) {
             try {
-                $response = $this->httpClient->request('GET', $url, [
-                    'headers' => ['Accept' => 'application/json'],
-                    'timeout' => self::TIMEOUT,
-                ]);
+                $response = $this->send('GET', $url, $serverUrl, ['headers' => ['Accept' => 'application/json']]);
                 if ($response->getStatusCode() !== 200) {
                     continue;
                 }
@@ -322,17 +337,15 @@ class OAuthClient
     /**
      * @param string $method
      * @param string $url
+     * @param string $serverUrl The MCP server (or its resource) the URL was discovered from
      * @param array<string, mixed> $options
      * @return array<string, mixed>
      * @throws OAuthException
      */
-    private function request(string $method, string $url, array $options): array
+    private function request(string $method, string $url, string $serverUrl, array $options): array
     {
         try {
-            $response = $this->httpClient->request($method, $url, $options + [
-                'headers' => ['Accept' => 'application/json'],
-                'timeout' => self::TIMEOUT,
-            ]);
+            $response = $this->send($method, $url, $serverUrl, $options + ['headers' => ['Accept' => 'application/json']]);
             $status = $response->getStatusCode();
             $decoded = json_decode($response->getContent(false), true);
         } catch (HttpExceptionInterface $e) {
@@ -351,5 +364,59 @@ class OAuthClient
         }
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * The one place a request leaves this class.
+     *
+     * - A server the administrator placed on a local host (localhost, *.test, *.internal ...) is a local
+     *   setup: it and whatever it names are asked directly.
+     * - Any other server's own origin is asked directly, since the administrator chose that address, but
+     *   without following redirects, which could lead anywhere.
+     * - Every other host such a server names must be a public name (not a single label, not one of the
+     *   local names) and is asked through the public-only client, which refuses an address in a private,
+     *   loopback or link-local range when it connects and again on every redirect.
+     *
+     * @param string $method
+     * @param string $url
+     * @param string $serverUrl
+     * @param array<string, mixed> $options
+     * @throws HttpExceptionInterface
+     */
+    private function send(string $method, string $url, string $serverUrl, array $options): ResponseInterface
+    {
+        $options += ['timeout' => self::TIMEOUT];
+        if ($this->endpointRule->isLocalUrl($serverUrl)) {
+            return $this->httpClient->request($method, $url, $options);
+        }
+        if (self::origin($url) === self::origin($serverUrl)) {
+            return $this->httpClient->request($method, $url, ['max_redirects' => 0] + $options);
+        }
+
+        // A name that only resolves inside the shop's network (a Docker service, a *.internal host) is
+        // refused by name: the address check below cannot tell when that network uses a public range.
+        $host = trim(strtolower((string)parse_url($url, PHP_URL_HOST)), '[]');
+        if (filter_var($host, FILTER_VALIDATE_IP) === false
+            && (!str_contains($host, '.') || $this->endpointRule->isLocalUrl($url))
+        ) {
+            throw new TransportException(sprintf('Host "%s" is a local name; a remote MCP server may not name it.', $host));
+        }
+
+        return $this->publicOnlyHttpClient->request($method, $url, $options);
+    }
+
+    /**
+     * scheme://host:port in lower case with the scheme's default port filled in; '' for a URL without a host.
+     */
+    private static function origin(string $url): string
+    {
+        $parts = parse_url($url);
+        $scheme = is_array($parts) ? strtolower((string)($parts['scheme'] ?? '')) : '';
+        $host = is_array($parts) ? strtolower((string)($parts['host'] ?? '')) : '';
+        if ($scheme === '' || $host === '') {
+            return '';
+        }
+
+        return $scheme . '://' . $host . ':' . ($parts['port'] ?? ($scheme === 'http' ? 80 : 443));
     }
 }
