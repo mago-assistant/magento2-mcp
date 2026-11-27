@@ -43,6 +43,9 @@ row that scan inserted or updated.
 | Call timeout (seconds) | 60 | How long one tool call may take, over stdio or HTTP; a server row may set its own |
 | Tool list cache lifetime (seconds) | 3600 | How long a fetched tool list is kept in the `mago_mcp` cache type |
 | Maximum result characters | 16000 | Longer text results are truncated before they reach the model |
+| MCP worker address | `127.0.0.1:8765` | Where the admin reaches the MCP worker; see [Local servers and the MCP worker](#local-servers-and-the-mcp-worker) |
+| MCP worker listens on | empty | What the worker binds; empty means the worker address |
+| Keep the MCP worker running | Yes | Cron starts and replaces the worker while a local server is enabled |
 
 ## Servers, where they come from
 
@@ -268,7 +271,8 @@ The full description and full schema arrive as just-in-time instructions after t
 tool, and again in the error message if the call's arguments do not validate. A server's own
 `instructions` from its handshake are sent once per request, with the first of its tools that is used.
 
-Each call to a stdio server spawns one process, makes the one request, and lets the process exit.
+Each call to a stdio server starts one process, makes the one request, and lets the process exit. From
+the command line the module starts it itself; from the admin the MCP worker does (next section).
 Each call to an http server is one initialize handshake per PHP request followed by the call, with the
 session id the server handed out and reused within that request; the protocol version the server
 answers is taken as it is. There are no long-lived sessions of either kind.
@@ -280,6 +284,56 @@ drops its cached list; `mago:mcp:refresh` drops it so the next use re-fetches.
 
 While a call runs, the chat panel shows the skill's own name as the tag and a plain phrase built from
 the tool name (`Getting order...`) as the status line.
+
+## Local servers and the MCP worker
+
+A stdio server is a process, and web PHP on a hardened host is not allowed to start processes: `proc_open`,
+`exec` and their siblings are in `disable_functions`, because that is what keeps an uploaded script from
+running commands. So the admin never starts one. It asks the MCP worker, `bin/magento mago:mcp:serve`, a
+small command-line process that starts the server, relays its input and output over one socket for the
+length of the call, and ends it.
+
+The rule is by PHP SAPI, not by what the host allows: `bin/magento`, cron and the worker itself start a
+server directly; every web request goes through the worker, also where web PHP could start processes. Web
+PHP needs only `stream_socket_client`.
+
+**Keeping it running.** Cron does it by default: every minute the `mago_mcp_worker_keepalive` job starts
+the worker when at least one local server is enabled and none answers, tells a worker of an earlier release
+to stop after a deploy (the next run starts the current one), and stops the worker when no local server is
+enabled. A shop without an enabled local server never runs a worker. To run it under supervisor or systemd
+instead, set **Keep the MCP worker running** to No and run `bin/magento mago:mcp:serve` there.
+
+```bash
+bin/magento mago:mcp:serve              # run the worker in the foreground
+bin/magento mago:mcp:serve --status     # which worker answers: root, pid, open connections
+bin/magento mago:mcp:serve --stop       # stop it once its open calls end
+```
+
+**Where it listens.** On one server keep the defaults: the worker binds `127.0.0.1:8765` and the admin
+connects there. When web PHP and command-line PHP run in separate containers, the admin connects to the
+command-line container by name and the worker binds that container's interface:
+
+```bash
+bin/magento config:set mago/mcp/worker_address php-cli:8765
+bin/magento config:set mago/mcp/worker_listen 0.0.0.0:8765
+```
+
+Never publish that port outside the server or its private container network.
+
+**What it accepts.** On connect the worker sends a fresh nonce; the client answers with the operation, the
+server name and an HMAC of those three under a key derived from this install's crypt key (`app/etc/env.php`),
+so nothing is configured and another install, or a captured line, is refused. The client names a server
+row and nothing else: the worker looks the row up and starts its command only when it is an enabled local
+server that is not flagged Missing. That is exactly what an administrator can already trigger from the grid.
+At most eight connections are served at once, a connection that has not sent its request within five
+seconds is closed, and a call lives at most its timeout plus five seconds. When the client leaves, its
+server is killed. A started server inherits none of the worker's sockets or files.
+
+**What an administrator sees.** With no worker answering, a local server's tools fail with: "Local MCP
+servers run through the MCP worker, which is not answering at `<address>`. Cron starts it within a minute
+while a local server is enabled; to start it now run bin/magento mago:mcp:serve." Where command-line PHP
+cannot start processes either, `mago:mcp:serve` refuses to start and says that this host cannot run local
+MCP servers; remote servers are not affected.
 
 ## Read-only servers
 
@@ -479,8 +533,8 @@ message, so the fence this module draws around server text carries no more autho
 Also Mago's: a confirmed proposal runs every stored call, including one the card did not describe
 because it was unavailable at proposal time; only the described calls should run.
 
-A stdio server is spawned from the web request under the PHP user, inheriting the PHP process's whole
-environment with the stored variables merged over it. Whatever a Composer `extra.mago-mcp` block, a
+A stdio server is started by the MCP worker (or by `bin/magento` on the command line) under that process's
+user, inheriting its whole environment with the stored variables merged over it. Whatever a Composer `extra.mago-mcp` block, a
 `.mcp.json` entry or a module definition stores is passed unchanged: whoever can edit any of those can
 already set the executable, so treat that ability as the ability to run arbitrary code on the Magento
 host.
@@ -515,12 +569,12 @@ A relative `cwd` is resolved against the Magento root, which is also the default
 A stdio entry in the Magento root's `.mcp.json` (the file Claude Code and Cursor read) is discovered
 when the option is on. A `docker exec ... <container> <command>` entry is unwrapped into the inner
 command, keeping `-w` as the working directory and `-e KEY=VALUE` pairs as environment and dropping
-`-u`, since that command is what actually needs to run once the module spawns it. This assumes Magento's
-PHP runs inside that same container.
+`-u`, since that command is what actually needs to run once the worker starts it. This assumes the
+worker runs inside that same container.
 
 ## Logging
 
-A failed process spawn, an unreachable remote server, a malformed handshake, or a call that fails at the
+A server that could not be started, an MCP worker that does not answer, an unreachable remote server, a malformed handshake, or a call that fails at the
 transport or JSON-RPC level is written to `var/log/mago-error.log`; a tool that answers with `isError` is
 returned to the model, not logged. When Mago's own debug flag is on, every call also
 writes metadata, the skill, argument keys, whether the result was an error, and the result's block count
@@ -560,5 +614,8 @@ or, from inside the module directory after `composer install`: `composer test`, 
 Tests are unit tests with fakes, not mocks. The stdio transport tests run a real fake MCP server over a
 real process (`Test/Unit/Fakes/fake-mcp-server.php`); the HTTP transport tests use Symfony's
 `MockHttpClient`. That fixture is why `phpcs.xml` allows `exec`-family calls under `Test/`; production
-code is covered by the standard sniffs except `Service/Mcp/StdioSession.php`, which disables the
-process-function sniffs because it must use `proc_open`.
+code is covered by the standard sniffs except the three files that start processes and must use
+`proc_open`: `Service/Mcp/Channel/ProcessChannel.php` (command line), `Service/Worker/Relay.php` (the
+worker) and `Service/Worker/Starter.php` (cron). `Test/Unit/Security/WebPathStartsNoProcessTest.php` fails
+when any other file calls a process function. The worker tests run a real relay in a child process
+(`Test/Unit/Fakes/run-relay.php`) and talk to it over TCP.

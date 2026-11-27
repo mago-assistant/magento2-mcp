@@ -2,7 +2,28 @@
 
 ## Unreleased
 
-Security hardening after an audit of 1.0.0 (2026-11-04). Nothing below changes a server row; roles may
+### Added
+
+- **The MCP worker, `bin/magento mago:mcp:serve`.** The admin no longer starts local (stdio) servers
+  itself: web PHP on a hardened host has `proc_open` disabled, and the call died with "Call to undefined
+  function proc_open()". The worker runs on the command line, starts the server a signed request names
+  (only an enabled, present local row; the command always comes from the database) and relays the call
+  over one socket. Settings: MCP worker address (`127.0.0.1:8765`), MCP worker listens on, Keep the MCP
+  worker running. A cron job, `mago_mcp_worker_keepalive`, keeps one worker of the current release running
+  while a local server is enabled and none otherwise. `--status` and `--stop` report on and stop it.
+
+### Changed
+
+- **Only the command line starts processes.** `bin/magento`, cron and the worker start a local server
+  directly; every web request goes through the worker, also where web PHP could start processes. Local
+  servers used from the admin need the worker, which cron starts within a minute.
+- **A started server inherits nothing.** PHP sets no close-on-exec, so a server started by the worker or by
+  cron would have inherited the worker's listening socket, client connections and cron's lock files; every
+  descriptor above stderr is now pointed at `/dev/null` in the child.
+- **A server row's own timeout is kept** when its `php` command is resolved to the CLI binary; before, the
+  resolved copy fell back to the default.
+
+Security hardening after an audit of 1.0.0 (2026-11-04), below. Nothing in it changes a server row; roles may
 need new grants.
 
 ### Changed
