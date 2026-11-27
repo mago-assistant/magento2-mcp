@@ -7,7 +7,13 @@ declare(strict_types=1);
 
 // A tiny MCP server over stdio for unit tests. Exits when stdin closes.
 // FAKE_MCP_CRASH=1 exits 3 before answering; FAKE_MCP_VERSION overrides the negotiated version;
-// FAKE_MCP_INSTRUCTIONS adds client instructions to the initialize result.
+// FAKE_MCP_INSTRUCTIONS adds client instructions to the initialize result; FAKE_MCP_MARKER names a file
+// created on start, so a test can prove a server was (not) started. serverInfo carries the pid. Tools
+// not listed: "big" answers with 3 MB of text, "exit" writes to stderr and exits 5 without answering.
+
+if (getenv('FAKE_MCP_MARKER')) {
+    touch((string)getenv('FAKE_MCP_MARKER'));
+}
 
 if (getenv('FAKE_MCP_CRASH') === '1') {
     fwrite(STDERR, "boom: fake crash\n");
@@ -49,7 +55,7 @@ while (($line = fgets(STDIN)) !== false) {
     switch ($request['method'] ?? '') {
         case 'initialize':
             $result = ['protocolVersion' => getenv('FAKE_MCP_VERSION') ?: '2025-06-18',
-                'capabilities' => ['tools' => new stdClass()], 'serverInfo' => ['name' => 'fake-mcp', 'version' => '0.1']];
+                'capabilities' => ['tools' => new stdClass()], 'serverInfo' => ['name' => 'fake-mcp', 'version' => '0.1', 'pid' => getmypid()]];
             if (getenv('FAKE_MCP_INSTRUCTIONS')) {
                 $result['instructions'] = getenv('FAKE_MCP_INSTRUCTIONS');
             }
@@ -77,6 +83,11 @@ while (($line = fgets(STDIN)) !== false) {
                 $send(['jsonrpc' => '2.0', 'method' => 'notifications/message', 'params' => ['level' => 'info', 'data' => 'working']]);
                 $send(['jsonrpc' => '2.0', 'id' => 'srv-ping-1', 'method' => 'ping']);
                 $send(['jsonrpc' => '2.0', 'id' => $id, 'result' => ['content' => [['type' => 'text', 'text' => json_encode($args)]], 'isError' => false]]);
+            } elseif ($name === 'big') {
+                $send(['jsonrpc' => '2.0', 'id' => $id, 'result' => ['content' => [['type' => 'text', 'text' => str_repeat('y', 3 * 1024 * 1024)]], 'isError' => false]]);
+            } elseif ($name === 'exit') {
+                fwrite(STDERR, "bye: exiting on request\n");
+                exit(5);
             } elseif ($name === 'item-delete') {
                 $send(['jsonrpc' => '2.0', 'id' => $id, 'result' => ['content' => [['type' => 'text', 'text' => 'Item not found']], 'isError' => true]]);
             } elseif ($name === 'slow-get') {
