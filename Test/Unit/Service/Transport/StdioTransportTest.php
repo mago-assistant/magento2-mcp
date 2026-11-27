@@ -37,7 +37,12 @@ final class StdioTransportTest extends TestCase
             new DebugLogger($this->log, new Json(), $magoConfig),
             $magoConfig,
             new PhpExecutableFinder(),
-            new \MagoAssistant\Mcp\Service\Privacy\SecretScrub()
+            new \MagoAssistant\Mcp\Service\Privacy\SecretScrub(),
+            new \MagoAssistant\Mcp\Service\Mcp\Channel\ChannelFactory(
+                new \MagoAssistant\Mcp\Model\Config(new \MagoAssistant\Mcp\Test\Unit\Fakes\FakeScopeConfig()),
+                $this->createStub(\Magento\Framework\App\DeploymentConfig::class),
+                'cli'
+            )
         );
         $this->client = new StdioTransport($this->factory);
     }

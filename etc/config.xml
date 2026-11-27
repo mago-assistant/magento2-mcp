@@ -9,6 +9,9 @@
                 <process_timeout>60</process_timeout>
                 <cache_lifetime>3600</cache_lifetime>
                 <max_result_chars>16000</max_result_chars>
+                <worker_address>127.0.0.1:8765</worker_address>
+                <worker_listen/>
+                <worker_autostart>1</worker_autostart>
             </mcp>
         </mago>
     </default>

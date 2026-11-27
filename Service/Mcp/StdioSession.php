@@ -98,6 +98,21 @@ class StdioSession
      */
     private function answerServerMessage(array $message): void
     {
+        if ($message['method'] === 'notifications/worker/exit') {
+            // The worker's last line: the server ended before answering.
+            $params = is_array($message['params'] ?? null) ? $message['params'] : [];
+            $stderr = is_string($params['stderr'] ?? null) ? $params['stderr'] : '';
+            if ($stderr !== '') {
+                $this->debug('MCP stderr', ['server' => $this->server->name, 'text' => $this->loggable($stderr)]);
+            }
+            $this->timedOut = true;
+            throw new McpProcessException(sprintf(
+                'MCP server "%s" exited (code %s) before answering: %s',
+                $this->server->name,
+                is_int($params['code'] ?? null) ? (string)$params['code'] : '?',
+                $this->loggable(strtok($stderr, "\n") ?: 'no output')
+            ));
+        }
         if (!array_key_exists('id', $message)) {
             return;
         }

@@ -30,6 +30,19 @@
                     <comment>Longer tool results are truncated before they reach the model (about 4 characters per token).</comment>
                     <validate>validate-digits validate-greater-than-zero</validate>
                 </field>
+                <field id="worker_address" translate="label comment" type="text" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>MCP worker address</label>
+                    <comment><![CDATA[A local MCP server is a process. The admin never starts processes itself; it asks the MCP worker (<code>bin/magento mago:mcp:serve</code>), which runs on the command line, at this host:port. On one server keep the default. When the worker runs in another container, give that container's name, for example <code>php-cli:8765</code>.]]></comment>
+                </field>
+                <field id="worker_listen" translate="label comment" type="text" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>MCP worker listens on</label>
+                    <comment><![CDATA[Empty: the worker address. Set it only when the worker must bind another address than the one the admin uses, for example <code>0.0.0.0:8765</code> inside a container. Never publish this port outside the server or its private container network.]]></comment>
+                </field>
+                <field id="worker_autostart" translate="label comment" type="select" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="1">
+                    <label>Keep the MCP worker running</label>
+                    <comment>Magento's cron starts the worker within a minute while at least one local server is enabled, replaces it after a deploy, and stops it when no local server is enabled. Set to No when supervisor or systemd runs it.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
             </group>
         </section>
     </system>

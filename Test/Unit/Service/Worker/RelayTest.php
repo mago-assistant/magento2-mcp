@@ -55,7 +55,7 @@ final class RelayTest extends TestCase
         $pipes = [];
         $this->relay = proc_open([PHP_BINARY, dirname(__DIR__, 2) . '/Fakes/run-relay.php', $config], [1 => ['pipe', 'w'], 2 => ['file', $this->dir . '/relay.err', 'a']], $pipes);
         $this->address = trim((string)fgets($pipes[1]));
-        self::assertMatchesRegularExpression('/^127\.0\.0\.1:\d+$/', $this->address, (string)@file_get_contents($this->dir . '/relay.err'));
+        self::assertMatchesRegularExpression('/^127\.0\.0\.1:\d+$/', $this->address, self::contents($this->dir . '/relay.err'));
     }
 
     /**
@@ -136,9 +136,14 @@ final class RelayTest extends TestCase
         return $socket;
     }
 
+    private static function contents(string $path): string
+    {
+        return is_readable($path) ? (string)file_get_contents($path) : '';
+    }
+
     private function alive(int $pid): bool
     {
-        return file_exists('/proc/' . $pid) && !str_contains((string)@file_get_contents('/proc/' . $pid . '/status'), "State:\tZ");
+        return file_exists('/proc/' . $pid) && !str_contains(self::contents('/proc/' . $pid . '/status'), "State:\tZ");
     }
 
     private function waitUntilGone(int $pid, float $seconds): bool
@@ -172,7 +177,7 @@ final class RelayTest extends TestCase
         $second = $this->openFake();
 
         $answer = $this->rpc($second, 1, 'initialize');
-        self::assertSame('fake-mcp', $answer['result']['serverInfo']['name'] ?? json_encode($answer) . (string)@file_get_contents($this->dir . '/relay.err'));
+        self::assertSame('fake-mcp', $answer['result']['serverInfo']['name'] ?? json_encode($answer) . self::contents($this->dir . '/relay.err'));
         self::assertSame('fake-mcp', $this->rpc($first, 1, 'initialize')['result']['serverInfo']['name']);
         self::assertNotSame(
             $this->rpc($first, 2, 'initialize')['result']['serverInfo']['pid'],
