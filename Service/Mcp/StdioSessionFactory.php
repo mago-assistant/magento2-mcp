@@ -55,6 +55,12 @@ class StdioSessionFactory
             return $server;
         }
 
-        return new ServerConfig($server->name, [$php, ...array_slice($server->command, 1)], $server->env, $server->cwd);
+        return new ServerConfig(
+            $server->name,
+            [$php, ...array_slice($server->command, 1)],
+            $server->env,
+            $server->cwd,
+            timeout: $server->timeout
+        );
     }
 }

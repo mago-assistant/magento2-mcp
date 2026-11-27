@@ -97,7 +97,8 @@ final class Relay
             throw new \LogicException('Call listen() before run().');
         }
         while (true) {
-            if ($this->stopping && ($this->relayCount() === 0 || microtime(true) > $this->stopDeadline)) {
+            // Stop once every connection has ended, including the one carrying the stop request's answer.
+            if ($this->stopping && ($this->connections === [] || microtime(true) > $this->stopDeadline)) {
                 foreach (array_keys($this->connections) as $id) {
                     $this->drop($id);
                 }
@@ -376,7 +377,7 @@ final class Relay
         try {
             $process = proc_open(
                 $server->command,
-                [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']] + $this->shadowInherited(),
+                [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']] + InheritedDescriptors::shadow(),
                 $pipes,
                 $cwd,
                 array_merge(getenv(), $server->env)
@@ -403,29 +404,6 @@ final class Relay
         $c['toChild'] = $rest;
         $c['deadline'] = microtime(true) + $server->timeout + 5;
         $this->log(sprintf('started "%s"', $name));
-    }
-
-    /**
-     * PHP marks no socket or file close-on-exec, so a process started here would inherit the listening
-     * socket and every client connection: a closed connection would stay open while that process lives,
-     * and the port would stay bound after the worker exits. proc_open() places any descriptor number the
-     * spec names in the child, so every descriptor this process has open above stderr is pointed at
-     * /dev/null there, which closes the inherited copy. A shell cannot do this portably (dash only names
-     * descriptors 0 to 9).
-     *
-     * @return array<int, array{0: string, 1: string, 2: string}>
-     */
-    private function shadowInherited(): array
-    {
-        $dir = is_dir('/proc/self/fd') ? '/proc/self/fd' : '/dev/fd';
-        $spec = [];
-        foreach (scandir($dir) ?: [] as $fd) {
-            if (ctype_digit($fd) && (int)$fd > 2) {
-                $spec[(int)$fd] = ['file', '/dev/null', 'r'];
-            }
-        }
-
-        return $spec;
     }
 
     private function housekeeping(): void

@@ -139,6 +139,7 @@
                 <item name="mago_mcp_refresh" xsi:type="object">MagoAssistant\Mcp\Console\Command\RefreshTools</item>
                 <item name="mago_mcp_enable" xsi:type="object">MagoAssistant\Mcp\Console\Command\EnableServer</item>
                 <item name="mago_mcp_disable" xsi:type="object">MagoAssistant\Mcp\Console\Command\DisableServer</item>
+                <item name="mago_mcp_serve" xsi:type="object">MagoAssistant\Mcp\Console\Command\Serve\Proxy</item>
             </argument>
         </arguments>
     </type>

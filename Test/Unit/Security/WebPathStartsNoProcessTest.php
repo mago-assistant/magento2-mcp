@@ -11,12 +11,12 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Hosts disable the process functions for web PHP; the code a web request runs must not call them. Only
- * ProcessChannel (command line) and the worker's Relay may.
+ * ProcessChannel (command line), the worker's Relay and the Starter cron uses may.
  */
 final class WebPathStartsNoProcessTest extends TestCase
 {
     private const FORBIDDEN = ['proc_open', 'popen', 'exec', 'shell_exec', 'system', 'passthru', 'pcntl_exec', 'pcntl_fork'];
-    private const ALLOWED = ['Service/Mcp/Channel/ProcessChannel.php', 'Service/Worker/Relay.php'];
+    private const ALLOWED = ['Service/Mcp/Channel/ProcessChannel.php', 'Service/Worker/Relay.php', 'Service/Worker/Starter.php'];
 
     #[Test]
     public function noModuleFileOutsideTheTwoAllowedOnesCallsAProcessFunction(): void
