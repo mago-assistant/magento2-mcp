@@ -8,15 +8,13 @@ namespace MagoAssistant\Mcp\Service\Mcp;
 
 use MagoAssistant\Mago\Api\Config\RepositoryInterface as MagoConfig;
 use MagoAssistant\Mago\Logger\DebugLogger;
+use MagoAssistant\Mcp\Service\Mcp\Channel\ChannelInterface;
 use MagoAssistant\Mcp\Service\Privacy\SecretScrub;
 
-// phpcs:disable Magento2.Security.InsecureFunction, Magento2.Functions.DiscouragedFunction, Magento2.Exceptions.TryProcessSystemResources
-// A JSON-RPC session over a child process needs proc_open and raw pipes: Magento\Framework\Shell only
-// wraps exec() through a shell, with no stdin, no streaming stdout and no timeout. This is the one file
-// in the module that talks to a process; every return value is checked, nothing is silenced.
+// phpcs:disable Magento2.Functions.DiscouragedFunction
 
 /**
- * One server process, one deadline, newline-delimited JSON-RPC 2.0 over its pipes.
+ * One server, one deadline, newline-delimited JSON-RPC 2.0 over the streams of a channel.
  */
 class StdioSession
 {
@@ -26,15 +24,8 @@ class StdioSession
     /** What a diagnostic line costs in the debug log, masked and bounded. */
     private const LOG_LINE_CAP = 200;
 
-    /** @var resource|null */
-    private $process = null;
-
-    /** @var array<int,resource> */
-    private array $pipes = [];
-
-    /** @var array<int,resource> streams still worth selecting on */
-    private array $readable = [];
-
+    private bool $open = false;
+    private bool $stderrClosed = false;
     private string $buffer = '';
     private string $stderr = '';
     private float $deadline = 0.0;
@@ -42,6 +33,7 @@ class StdioSession
     private bool $timedOut = false;
 
     public function __construct(
+        private readonly ChannelInterface $channel,
         private readonly ServerConfig $server,
         private readonly string $rootDir,
         private readonly int $timeoutSeconds,
@@ -53,30 +45,8 @@ class StdioSession
 
     public function start(): void
     {
-        $cwd = $this->server->cwd ?? $this->rootDir;
-        if (!str_starts_with($cwd, '/')) {
-            $cwd = rtrim($this->rootDir, '/') . '/' . $cwd;
-        }
-        $spec = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-        $env = array_merge(getenv(), $this->server->env);
-        $pipes = [];
-        // A missing binary makes proc_open() both return false and raise an E_WARNING (posix_spawn()
-        // failing with ENOENT); the warning duplicates the McpProcessException thrown just below, so it
-        // is caught here instead of leaking into the caller's error log or a PHPUnit warning.
-        set_error_handler(static fn (): bool => true, E_WARNING);
-        try {
-            $process = proc_open($this->server->command, $spec, $pipes, $cwd, $env);
-        } finally {
-            restore_error_handler();
-        }
-        if (!is_resource($process)) {
-            throw new McpProcessException(sprintf('Could not start MCP server "%s".', $this->server->name));
-        }
-        stream_set_blocking($pipes[1], false);
-        stream_set_blocking($pipes[2], false);
-        $this->process = $process;
-        $this->pipes = $pipes;
-        $this->readable = [1 => $pipes[1], 2 => $pipes[2]];
+        $this->channel->open($this->server, $this->rootDir, $this->timeoutSeconds);
+        $this->open = true;
         $this->deadline = microtime(true) + $this->timeoutSeconds;
     }
 
@@ -114,27 +84,11 @@ class StdioSession
 
     public function close(): void
     {
-        if ($this->process === null) {
+        if (!$this->open) {
             return;
         }
-        foreach ($this->pipes as $pipe) {
-            if (is_resource($pipe)) {
-                fclose($pipe);
-            }
-        }
-        if (!$this->timedOut) {
-            $waitUntil = microtime(true) + 2.0;
-            while (microtime(true) < $waitUntil && proc_get_status($this->process)['running']) {
-                usleep(50000);
-            }
-        }
-        if (proc_get_status($this->process)['running']) {
-            proc_terminate($this->process, 9);
-        }
-        proc_close($this->process);
-        $this->process = null;
-        $this->pipes = [];
-        $this->readable = [];
+        $this->channel->close($this->timedOut);
+        $this->open = false;
     }
 
     /**
@@ -161,10 +115,9 @@ class StdioSession
     private function write(array $message): void
     {
         $line = json_encode($message, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
-        if (!isset($this->pipes[0]) || !is_resource($this->pipes[0]) || fwrite($this->pipes[0], $line) === false) {
+        if (!$this->channel->write($line)) {
             throw new McpProcessException(sprintf('MCP server "%s" closed its input.', $this->server->name));
         }
-        fflush($this->pipes[0]);
     }
 
     /**
@@ -197,13 +150,18 @@ class StdioSession
         if ($remaining <= 0) {
             throw $this->timeout();
         }
-        $read = array_values($this->readable);
+        $out = $this->channel->output();
+        $err = $this->stderrClosed ? null : $this->channel->errors();
+        $read = array_values(array_filter([$out, $err], static fn ($stream): bool => $stream !== null));
+        if ($read === []) {
+            throw new McpProcessException(sprintf('Lost the streams of MCP server "%s".', $this->server->name));
+        }
         $write = null;
         $except = null;
         $seconds = (int)floor($remaining);
         $ready = stream_select($read, $write, $except, $seconds, (int)(($remaining - $seconds) * 1e6));
         if ($ready === false) {
-            throw new McpProcessException(sprintf('Lost the pipes of MCP server "%s".', $this->server->name));
+            throw new McpProcessException(sprintf('Lost the streams of MCP server "%s".', $this->server->name));
         }
         if ($ready === 0) {
             throw $this->timeout();
@@ -211,12 +169,12 @@ class StdioSession
         foreach ($read as $stream) {
             $chunk = fread($stream, 65536);
             if ($chunk === false || $chunk === '') {
-                if (feof($stream) && $stream === $this->pipes[2]) {
-                    unset($this->readable[2]); // a closed stderr would otherwise be "readable" forever
+                if (feof($stream) && $stream === $err) {
+                    $this->stderrClosed = true; // a closed stderr would otherwise be "readable" forever
                 }
                 continue;
             }
-            if ($stream === $this->pipes[2]) {
+            if ($stream === $err) {
                 $this->stderr = substr($this->stderr . $chunk, 0, self::STDERR_CAP);
                 $this->debug('MCP stderr', ['server' => $this->server->name, 'text' => $this->loggable($chunk)]);
                 continue;
@@ -233,14 +191,13 @@ class StdioSession
                 (int)(self::MESSAGE_CAP / 1048576)
             ));
         }
-        if (strpos($this->buffer, "\n") === false && feof($this->pipes[1])) {
-            // The process may already have been closed; its exit code is then unknown.
-            $status = is_resource($this->process) ? proc_get_status($this->process) : ['running' => true, 'exitcode' => -1];
+        if (strpos($this->buffer, "\n") === false && $out !== null && feof($out)) {
+            $code = $this->channel->exitCode();
             $first = strtok($this->stderr, "\n") ?: 'no output';
             throw new McpProcessException(sprintf(
                 'MCP server "%s" exited (code %s) before answering: %s',
                 $this->server->name,
-                $status['running'] ? '?' : (string)$status['exitcode'],
+                $code === null ? '?' : (string)$code,
                 $this->loggable($first)
             ));
         }

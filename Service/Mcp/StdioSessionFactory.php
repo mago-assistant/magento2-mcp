@@ -9,6 +9,7 @@ namespace MagoAssistant\Mcp\Service\Mcp;
 use Magento\Framework\App\Filesystem\DirectoryList;
 use MagoAssistant\Mago\Api\Config\RepositoryInterface as MagoConfig;
 use MagoAssistant\Mago\Logger\DebugLogger;
+use MagoAssistant\Mcp\Service\Mcp\Channel\ProcessChannel;
 use MagoAssistant\Mcp\Service\Privacy\SecretScrub;
 use Symfony\Component\Process\PhpExecutableFinder;
 
@@ -29,6 +30,7 @@ class StdioSessionFactory
     public function create(ServerConfig $server, int $timeoutSeconds): StdioSession
     {
         return new StdioSession(
+            new ProcessChannel(),
             $this->resolve($server),
             $this->directoryList->getRoot(),
             $timeoutSeconds,
