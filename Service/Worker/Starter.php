@@ -28,6 +28,26 @@ class Starter
     ) {
     }
 
+    /**
+     * The environment the worker, and every local server it starts, runs with: cron's, which often has a
+     * short PATH (/usr/bin:/bin) that misses /usr/local/bin, where node, npx and many server binaries live.
+     *
+     * @param array<string,string> $env
+     * @return array<string,string>
+     */
+    public static function environment(array $env): array
+    {
+        $path = array_values(array_filter(explode(':', $env['PATH'] ?? '')));
+        foreach (['/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin'] as $dir) {
+            if (!in_array($dir, $path, true)) {
+                $path[] = $dir;
+            }
+        }
+        $env['PATH'] = implode(':', $path);
+
+        return $env;
+    }
+
     public function start(): void
     {
         $root = $this->directoryList->getRoot();
@@ -39,7 +59,7 @@ class Starter
                 + InheritedDescriptors::shadow(),
             $pipes,
             $root,
-            array_merge(getenv(), ['MAGO_MCP_WORKER_LOG' => $this->directoryList->getPath(DirectoryList::LOG) . '/mago-mcp-worker.log'])
+            self::environment(getenv()) + ['MAGO_MCP_WORKER_LOG' => $this->directoryList->getPath(DirectoryList::LOG) . '/mago-mcp-worker.log']
         );
         if (!is_resource($process)) {
             $this->logger->error('Mago MCP: could not start the MCP worker.');

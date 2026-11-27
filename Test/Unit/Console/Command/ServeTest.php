@@ -30,10 +30,10 @@ final class ServeTest extends TestCase
         $this->stopRelay();
     }
 
-    private function tester(string $address, bool $canStartProcesses = true): CommandTester
+    private function tester(string $address, bool $canStartProcesses = true, string $cryptKey = self::CRYPT_KEY): CommandTester
     {
         $deployment = $this->createStub(DeploymentConfig::class);
-        $deployment->method('get')->willReturn(self::CRYPT_KEY);
+        $deployment->method('get')->willReturn($cryptKey);
         $config = new Config(new FakeScopeConfig([Config::XML_PATH_WORKER_ADDRESS => $address]));
         $host = $this->createStub(HostCheck::class);
         $host->method('canStartProcesses')->willReturn($canStartProcesses);
@@ -44,7 +44,8 @@ final class ServeTest extends TestCase
             $this->createStub(ServerResolver::class),
             $host,
             new DirectoryList(sys_get_temp_dir()),
-            $deployment
+            $deployment,
+            new \MagoAssistant\Mcp\Service\Worker\WorkerProcess(new DirectoryList(sys_get_temp_dir()))
         ));
     }
 
@@ -90,6 +91,25 @@ final class ServeTest extends TestCase
 
         self::assertSame(1, $tester->execute([]));
         self::assertStringContainsString('This host cannot run local MCP servers', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function refusesToServeWithoutACryptKey(): void
+    {
+        $tester = $this->tester('127.0.0.1:0', cryptKey: '');
+
+        self::assertSame(1, $tester->execute([]));
+        self::assertStringContainsString('no crypt key', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function statusNamesAWorkerThatCannotProveItself(): void
+    {
+        $address = $this->startRelay([], 'another-shop');
+        $tester = $this->tester($address);
+
+        self::assertSame(1, $tester->execute(['--status' => true]));
+        self::assertStringContainsString('cannot prove', $tester->getDisplay());
     }
 
     #[Test]

@@ -130,6 +130,37 @@ final class WorkerChannelTest extends TestCase
     }
 
     #[Test]
+    public function aProcessOnTheWorkersPortThatCannotProveItselfGetsNothing(): void
+    {
+        $received = $this->relayDir . '/impostor-received';
+        $pipes = [];
+        $impostor = proc_open([PHP_BINARY, dirname(__DIR__, 3) . '/Fakes/impostor-worker.php', $received], [1 => ['pipe', 'w']], $pipes);
+        $address = trim((string)fgets($pipes[1]));
+        try {
+            $this->transport($address)->callTool($this->row('fake'), 'echo-args', ['text' => 'customer data']);
+            self::fail('expected an McpProcessException');
+        } catch (McpProcessException $e) {
+            self::assertStringContainsString('could not prove', $e->getMessage());
+        } finally {
+            usleep(300000);
+            proc_terminate($impostor, 9);
+            proc_close($impostor);
+        }
+        self::assertSame('', is_file($received) ? (string)file_get_contents($received) : '', 'no JSON-RPC byte was sent');
+    }
+
+    #[Test]
+    public function statusTellsAnImpostorOrAnotherKeyFromNoWorker(): void
+    {
+        $deployment = $this->createStub(DeploymentConfig::class);
+        $deployment->method('get')->willReturn('another-shop');
+        $factory = new ChannelFactory(new Config(new FakeScopeConfig([Config::XML_PATH_WORKER_ADDRESS => $this->address])), $deployment, 'cli');
+
+        self::assertSame(['state' => 'refused'], $factory->workerClient()->status());
+        self::assertNull((new ChannelFactory(new Config(new FakeScopeConfig([Config::XML_PATH_WORKER_ADDRESS => '127.0.0.1:1'])), $deployment, 'cli'))->workerClient()->status());
+    }
+
+    #[Test]
     public function theCommandLineStillStartsTheServerItself(): void
     {
         $server = new ServerConfig('fake', self::fakeServerCommand(), timeout: 10);

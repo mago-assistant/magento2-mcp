@@ -15,7 +15,8 @@ use PHPUnit\Framework\TestCase;
  */
 final class WebPathStartsNoProcessTest extends TestCase
 {
-    private const FORBIDDEN = ['proc_open', 'popen', 'exec', 'shell_exec', 'system', 'passthru', 'pcntl_exec', 'pcntl_fork'];
+    /** Every function that starts or forks a process; pcntl_signal and the like only handle signals. */
+    private const FORBIDDEN = ['proc_open', 'popen', 'exec', 'shell_exec', 'system', 'passthru', 'pcntl_exec', 'pcntl_fork', 'pcntl_rfork', 'pcntl_unshare'];
     private const ALLOWED = ['Service/Mcp/Channel/ProcessChannel.php', 'Service/Worker/Relay.php', 'Service/Worker/Starter.php'];
 
     #[Test]
@@ -32,7 +33,7 @@ final class WebPathStartsNoProcessTest extends TestCase
                 continue;
             }
             foreach ($this->functionCalls((string)file_get_contents($file->getPathname())) as $name) {
-                if (in_array(strtolower($name), self::FORBIDDEN, true) || str_starts_with(strtolower($name), 'pcntl_')) {
+                if (in_array(strtolower($name), self::FORBIDDEN, true)) {
                     $calls[] = $relative . ': ' . $name;
                 }
             }

@@ -25,7 +25,15 @@ $resolver = static function (string $name) use ($cfg): ?ServerConfig {
 $log = static function (string $message): void {
     fwrite(STDERR, date('H:i:s') . ' ' . $message . "\n");
 };
-$relay = new Relay($resolver, Handshake::key($cfg['key']), $cfg['root'], $cfg['max'] ?? 8, $log, $cfg['handshake'] ?? 5.0);
+$relay = new Relay(
+    $resolver,
+    static fn (): array => Handshake::keys($cfg['key']),
+    $cfg['root'],
+    $cfg['max'] ?? 8,
+    $log,
+    $cfg['handshake'] ?? 5.0,
+    $cfg['build'] ?? ''
+);
 fwrite(STDOUT, $relay->listen('127.0.0.1:0') . "\n");
 fflush(STDOUT);
 $relay->run();

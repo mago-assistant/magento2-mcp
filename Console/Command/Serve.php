@@ -14,7 +14,9 @@ use MagoAssistant\Mcp\Service\Mcp\Channel\ChannelFactory;
 use MagoAssistant\Mcp\Service\Worker\Handshake;
 use MagoAssistant\Mcp\Service\Worker\HostCheck;
 use MagoAssistant\Mcp\Service\Worker\Relay;
+use MagoAssistant\Mcp\Service\Worker\BuildIdentity;
 use MagoAssistant\Mcp\Service\Worker\ServerResolver;
+use MagoAssistant\Mcp\Service\Worker\WorkerProcess;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -32,6 +34,7 @@ class Serve extends Command
         private readonly HostCheck $host,
         private readonly DirectoryList $directoryList,
         private readonly DeploymentConfig $deploymentConfig,
+        private readonly WorkerProcess $process,
         ?string $name = null
     ) {
         parent::__construct($name);
@@ -58,10 +61,22 @@ class Serve extends Command
 
                 return Command::FAILURE;
             }
+            if ($status['state'] !== 'running') {
+                $output->writeln(sprintf(
+                    $status['state'] === 'busy'
+                        ? 'The MCP worker at %s is busy.'
+                        : 'Something answers at %s but cannot prove it is this shop\'s MCP worker (another crypt key, '
+                        . 'an older worker or another program). Cron ends a worker of this shop through its pid file.',
+                    $client->address()
+                ));
+
+                return $status['state'] === 'busy' ? Command::SUCCESS : Command::FAILURE;
+            }
             $output->writeln(sprintf(
-                'MCP worker at %s, root: %s, pid: %d, open connections: %d, running since %s.',
+                'MCP worker at %s, root: %s, build: %s, pid: %d, open connections: %d, running since %s.',
                 $client->address(),
                 (string)$status['root'],
+                (string)$status['build'],
                 (int)$status['pid'],
                 (int)$status['connections'],
                 gmdate('Y-m-d H:i:s', (int)$status['started']) . ' UTC'
@@ -88,15 +103,24 @@ class Serve extends Command
             return Command::FAILURE;
         }
 
+        if ($this->keys() === []) {
+            $output->writeln('<error>This install has no crypt key in app/etc/env.php; the MCP worker cannot authenticate its clients.</error>');
+
+            return Command::FAILURE;
+        }
+
         $listen = (string)($input->getOption('listen') ?: $this->config->getWorkerListen());
+        $root = $this->directoryList->getRoot();
         $relay = new Relay(
             \Closure::fromCallable($this->resolver),
-            Handshake::key((string)$this->deploymentConfig->get(ConfigOptionsListConstants::CONFIG_PATH_CRYPT_KEY)),
-            $this->directoryList->getRoot(),
+            fn (): array => $this->keys(true),
+            $root,
             max(1, (int)$input->getOption('max-connections')),
             static function (string $message) use ($output): void {
                 $output->writeln(gmdate('Y-m-d H:i:s') . ' ' . $message);
-            }
+            },
+            5.0,
+            BuildIdentity::of($root)
         );
         try {
             $bound = $relay->listen($listen);
@@ -114,10 +138,39 @@ class Serve extends Command
         if (function_exists('posix_setsid')) {
             posix_setsid();
         }
-        $output->writeln(sprintf('%s MCP worker listening on %s (root: %s).', gmdate('Y-m-d H:i:s'), $bound, $this->directoryList->getRoot()));
-        $relay->run();
+        if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
+            pcntl_async_signals(true);
+            foreach ([SIGTERM, SIGINT] as $signal) {
+                pcntl_signal($signal, static function () use ($relay): void {
+                    $relay->stopNow();
+                });
+            }
+        }
+        $pid = (int)getmypid();
+        $this->process->record($pid);
+        $output->writeln(sprintf('%s MCP worker listening on %s (root: %s, pid %d).', gmdate('Y-m-d H:i:s'), $bound, $root, $pid));
+        try {
+            $relay->run();
+        } finally {
+            $this->process->clear($pid);
+        }
         $output->writeln(gmdate('Y-m-d H:i:s') . ' MCP worker stopped.');
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * The worker keys of this install's crypt key; read again on every request so a changed key applies
+     * without a restart.
+     *
+     * @return string[]
+     */
+    private function keys(bool $fresh = false): array
+    {
+        if ($fresh) {
+            $this->deploymentConfig->resetData();
+        }
+
+        return Handshake::keys((string)$this->deploymentConfig->get(ConfigOptionsListConstants::CONFIG_PATH_CRYPT_KEY));
     }
 }

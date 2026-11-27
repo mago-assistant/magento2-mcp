@@ -298,10 +298,18 @@ server directly; every web request goes through the worker, also where web PHP c
 PHP needs only `stream_socket_client`.
 
 **Keeping it running.** Cron does it by default: every minute the `mago_mcp_worker_keepalive` job starts
-the worker when at least one local server is enabled and none answers, tells a worker of an earlier release
-to stop after a deploy (the next run starts the current one), and stops the worker when no local server is
-enabled. A shop without an enabled local server never runs a worker. To run it under supervisor or systemd
-instead, set **Keep the MCP worker running** to No and run `bin/magento mago:mcp:serve` there.
+the worker when the addon is on, at least one local server is enabled and none answers. It replaces a
+worker of another release or build in the same run (a new release directory, or an in-place deploy that
+changed `pub/static/deployed_version.txt`, `app/etc/config.php`, the compiled DI or this addon), and stops
+the worker when no local server is enabled. A worker it can no longer talk to (the crypt key changed, or an
+older version of the protocol) is ended through `var/mago-mcp-worker.pid`, and the next run starts the
+current one. A shop without an enabled local server never runs a worker. To run it under supervisor or
+systemd instead, set **Keep the MCP worker running** to No and run `bin/magento mago:mcp:serve` there.
+
+The worker, and every local server it starts, runs as the user cron runs as, with cron's environment plus
+the usual `PATH` directories (`/usr/local/bin` and the rest, which cron's short `PATH` misses). A server
+that needs a variable the web server's environment has (an API token, a `HOME`) gets it from its own
+`env` setting, not from PHP-FPM.
 
 ```bash
 bin/magento mago:mcp:serve              # run the worker in the foreground
@@ -311,7 +319,8 @@ bin/magento mago:mcp:serve --stop       # stop it once its open calls end
 
 **Where it listens.** On one server keep the defaults: the worker binds `127.0.0.1:8765` and the admin
 connects there. When web PHP and command-line PHP run in separate containers, the admin connects to the
-command-line container by name and the worker binds that container's interface:
+command-line container by name and the worker binds that container's interface. Cron must run in that
+same container, since cron is what starts the worker:
 
 ```bash
 bin/magento config:set mago/mcp/worker_address php-cli:8765
@@ -320,14 +329,24 @@ bin/magento config:set mago/mcp/worker_listen 0.0.0.0:8765
 
 Never publish that port outside the server or its private container network.
 
-**What it accepts.** On connect the worker sends a fresh nonce; the client answers with the operation, the
-server name and an HMAC of those three under a key derived from this install's crypt key (`app/etc/env.php`),
-so nothing is configured and another install, or a captured line, is refused. The client names a server
-row and nothing else: the worker looks the row up and starts its command only when it is an enabled local
-server that is not flagged Missing. That is exactly what an administrator can already trigger from the grid.
-At most eight connections are served at once, a connection that has not sent its request within five
-seconds is closed, and a call lives at most its timeout plus five seconds. When the client leaves, its
-server is killed. A started server inherits none of the worker's sockets or files.
+**What it accepts.** Both sides prove they belong to the same install, with a key derived from this install's
+crypt key (`app/etc/env.php`), so nothing is configured. On connect the worker sends a fresh nonce; the
+client sends its own nonce and an HMAC over both nonces, the operation, the server name and the timeout; the
+worker signs its answer over both nonces. Another install, a captured line, or a program that took the
+worker's port while no worker ran is refused, and the admin sends no tool arguments to a listener that
+cannot prove itself. The worker reads the crypt key on every request and accepts every key a rotated crypt
+key lists. The client names a server row and nothing else: the worker looks the row up and starts its
+command only when it is an enabled local server that is not flagged Missing. That is exactly what an
+administrator can already trigger from the grid.
+
+At most eight calls run at once (`--max-connections`), and at most sixteen connections may be in their
+handshake besides; a connection that has not sent its request within five seconds is closed. A call lives
+at most the timeout the admin's request carries (the current Call timeout setting, or the row's) plus five
+seconds. Each server is started as the leader of its own process group, and when its client leaves, its
+time is up or it stops reading its input, the whole group is killed, including what it started itself (an
+`npx` or shell launcher). A started server inherits none of the worker's sockets or files. The worker's
+log, `var/log/mago-mcp-worker.log`, says which server started and how it ended, never what it wrote to
+stderr: that text can echo credentials and reaches the admin's session, which masks it.
 
 **What an administrator sees.** With no worker answering, a local server's tools fail with: "Local MCP
 servers run through the MCP worker, which is not answering at `<address>`. Cron starts it within a minute

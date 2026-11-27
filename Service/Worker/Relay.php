@@ -29,17 +29,22 @@ final class Relay
     private const STOP_GRACE = 30.0;
     /** How long a closing connection may take to flush its last bytes */
     private const FLUSH_GRACE = 5.0;
-    /** How long to wait for a process whose stdout closed to exit, before it is killed */
+    /** How long to wait for a process whose stdout closed to exit, or the reverse, before ending the call */
     private const EXIT_GRACE = 1.0;
+    /** Connections still in their handshake; separate from the call slots so idle ones cannot take those */
+    private const HANDSHAKE_SLOTS = 16;
+    /** Longest call a client may ask for */
+    private const MAX_TIMEOUT = 3600;
 
     /** @var resource|null */
     private $listener = null;
 
     /**
      * @var array<int, array{
-     *     socket: resource, phase: string, nonce: string, line: string, deadline: float,
-     *     process: resource|null, stdin: resource|null, stdout: resource|null, stderr: resource|null,
-     *     toChild: string, toClient: string, stderrText: string, stdoutEofAt: float|null, server: string
+     *     socket: resource, phase: string, nonce: string, clientNonce: string, key: string, line: string,
+     *     deadline: float, process: resource|null, pid: int|null, stdin: resource|null, stdout: resource|null,
+     *     stderr: resource|null, toChild: string, toClient: string, stderrText: string, stdoutEofAt: float|null,
+     *     exitedAt: float|null, exitCode: int|null, server: string
      * }>
      */
     private array $connections = [];
@@ -50,22 +55,36 @@ final class Relay
     private bool $stopping = false;
     private float $stopDeadline = 0.0;
     private readonly int $started;
+    private readonly ?string $setsid;
 
     /**
      * @param \Closure(string): ?ServerConfig $resolver an enabled local (stdio) server by name, or null
-     * @param string $key Handshake::key() of this install's crypt key
+     * @param \Closure(): string[] $keys Handshake::keys() of this install's crypt key, read on every request so
+     *        a changed crypt key takes effect without restarting the worker
      * @param string $rootDir Magento root; working directory of a server without its own
      * @param \Closure(string): void|null $log
+     * @param string $build what the install was built from (BuildIdentity), reported by status
      */
     public function __construct(
         private readonly \Closure $resolver,
-        private readonly string $key,
+        private readonly \Closure $keys,
         private readonly string $rootDir,
         private readonly int $maxConnections = 8,
         private readonly ?\Closure $log = null,
-        private readonly float $handshakeTimeout = 5.0
+        private readonly float $handshakeTimeout = 5.0,
+        private readonly string $build = ''
     ) {
         $this->started = time();
+        // A server is started as the leader of its own process group, so the processes it starts itself
+        // (an npx or shell launcher) end with it.
+        $setsid = null;
+        foreach (['/usr/bin/setsid', '/bin/setsid'] as $candidate) {
+            if (is_executable($candidate)) {
+                $setsid = $candidate;
+                break;
+            }
+        }
+        $this->setsid = function_exists('posix_kill') ? $setsid : null;
     }
 
     /**
@@ -86,6 +105,14 @@ final class Relay
         $this->listener = $listener;
 
         return (string)stream_socket_get_name($listener, false);
+    }
+
+    /**
+     * Stop now: close the listener and end every call, as on SIGTERM.
+     */
+    public function stopNow(): void
+    {
+        $this->beginStop(0.0);
     }
 
     /**
@@ -145,7 +172,8 @@ final class Relay
         }
         foreach ($this->connections as $id => $c) {
             $this->index[get_resource_id($c['socket'])] = [$id, 'socket'];
-            if ($c['phase'] !== 'closing' && strlen($c['toChild']) < self::BUFFER_CAP) {
+            // Always read the client, so a client that leaves is noticed at once.
+            if ($c['phase'] !== 'closing') {
                 $read[] = $c['socket'];
             }
             if ($c['toClient'] !== '') {
@@ -192,6 +220,7 @@ final class Relay
         switch ($role) {
             case 'socket':
                 if ($eof) {
+                    unset($c);
                     $this->drop($id); // the client is gone; so is its server
 
                     return;
@@ -201,6 +230,7 @@ final class Relay
                     $newline = strpos($c['line'], "\n");
                     if ($newline === false) {
                         if (strlen($c['line']) > self::LINE_CAP) {
+                            unset($c);
                             $this->fail($id, 'request too long');
                         }
 
@@ -215,6 +245,14 @@ final class Relay
                     return;
                 }
                 if ($c['phase'] === 'relay') {
+                    if (strlen($c['toChild']) + strlen($chunk) > self::BUFFER_CAP) {
+                        // The server has stopped reading its input: the call cannot go on.
+                        $this->log(sprintf('"%s" stopped reading its input; ended the call', $c['server']));
+                        unset($c);
+                        $this->drop($id);
+
+                        return;
+                    }
                     $c['toChild'] .= $chunk;
                 }
 
@@ -284,11 +322,12 @@ final class Relay
         if (!is_resource($socket)) {
             return;
         }
-        if (count($this->connections) >= $this->maxConnections) {
+        $waiting = count(array_filter($this->connections, static fn (array $c): bool => $c['phase'] === 'handshake'));
+        if ($waiting >= self::HANDSHAKE_SLOTS) {
             $busy = $this->json(['ok' => false, 'error' => 'busy']);
             $this->quietly(static fn () => fwrite($socket, $busy));
             fclose($socket);
-            $this->log('refused a connection: busy');
+            $this->log('refused a connection: too many unfinished handshakes');
 
             return;
         }
@@ -298,9 +337,12 @@ final class Relay
             'socket' => $socket,
             'phase' => 'handshake',
             'nonce' => $nonce,
+            'clientNonce' => '',
+            'key' => '',
             'line' => '',
             'deadline' => microtime(true) + $this->handshakeTimeout,
             'process' => null,
+            'pid' => null,
             'stdin' => null,
             'stdout' => null,
             'stderr' => null,
@@ -308,6 +350,8 @@ final class Relay
             'toClient' => $this->json(['v' => Handshake::PROTOCOL_VERSION, 'nonce' => $nonce]),
             'stderrText' => '',
             'stdoutEofAt' => null,
+            'exitedAt' => null,
+            'exitCode' => null,
             'server' => '',
         ];
     }
@@ -315,24 +359,38 @@ final class Relay
     private function handle(int $id, string $line, string $rest): void
     {
         $request = json_decode($line, true);
-        $op = is_array($request) && is_string($request['op'] ?? null) ? $request['op'] : '';
-        $server = is_array($request) && is_string($request['server'] ?? null) ? $request['server'] : '';
-        $auth = is_array($request) && is_string($request['auth'] ?? null) ? $request['auth'] : '';
-        if (!in_array($op, ['open', 'status', 'stop'], true)) {
+        $request = is_array($request) ? $request : [];
+        $op = is_string($request['op'] ?? null) ? $request['op'] : '';
+        $server = is_string($request['server'] ?? null) ? $request['server'] : '';
+        $auth = is_string($request['auth'] ?? null) ? $request['auth'] : '';
+        $timeout = is_int($request['timeout'] ?? null) ? $request['timeout'] : 0;
+        $clientNonce = $request['cnonce'] ?? null;
+        if (!in_array($op, ['open', 'status', 'stop'], true) || !Handshake::isNonce($clientNonce)) {
             $this->fail($id, 'bad request');
 
             return;
         }
-        if (!Handshake::verify($this->key, $this->connections[$id]['nonce'], $op, $server, $auth)) {
+        try {
+            $keys = ($this->keys)();
+        } catch (\Throwable $e) {
+            $this->log('could not read the crypt key: ' . $e->getMessage());
+            $keys = [];
+        }
+        $key = Handshake::verifyRequest($keys, $this->connections[$id]['nonce'], $clientNonce, $op, $server, $timeout, $auth);
+        if ($key === null) {
             $this->log(sprintf('refused an unsigned or wrongly signed "%s" request', $op));
+            // No proof: the client either has another key or is not this install.
             $this->fail($id, 'not authorised');
 
             return;
         }
+        $this->connections[$id]['clientNonce'] = $clientNonce;
+        $this->connections[$id]['key'] = $key;
         if ($op === 'status') {
             $this->finish($id, [
                 'ok' => true,
                 'root' => realpath($this->rootDir) ?: $this->rootDir,
+                'build' => $this->build,
                 'pid' => getmypid(),
                 'connections' => $this->relayCount(),
                 'started' => $this->started,
@@ -341,22 +399,27 @@ final class Relay
             return;
         }
         if ($op === 'stop') {
-            $this->stopping = true;
-            $this->stopDeadline = microtime(true) + self::STOP_GRACE;
-            if ($this->listener !== null) {
-                fclose($this->listener);
-                $this->listener = null;
-            }
             $this->log('stop requested');
+            $this->beginStop(self::STOP_GRACE);
             $this->finish($id, ['ok' => true]);
 
             return;
         }
-        $this->open($id, $server, $rest);
+        $this->open($id, $server, $timeout, $rest);
     }
 
-    private function open(int $id, string $name, string $rest): void
+    private function open(int $id, string $name, int $requestedTimeout, string $rest): void
     {
+        if ($this->stopping) {
+            $this->fail($id, 'the worker is stopping');
+
+            return;
+        }
+        if ($this->relayCount() >= $this->maxConnections) {
+            $this->fail($id, 'busy');
+
+            return;
+        }
         try {
             $server = ($this->resolver)($name);
         } catch (\Throwable $e) {
@@ -372,11 +435,12 @@ final class Relay
         if (!str_starts_with($cwd, '/')) {
             $cwd = rtrim($this->rootDir, '/') . '/' . $cwd;
         }
+        $command = $this->setsid !== null ? [$this->setsid, ...$server->command] : $server->command;
         $pipes = [];
         set_error_handler(static fn (): bool => true, E_WARNING);
         try {
             $process = proc_open(
-                $server->command,
+                $command,
                 [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']] + InheritedDescriptors::shadow(),
                 $pipes,
                 $cwd,
@@ -393,16 +457,20 @@ final class Relay
         foreach ($pipes as $pipe) {
             stream_set_blocking($pipe, false);
         }
+        // The client's timeout is signed, so it is the admin's current setting; the row's when it sent none.
+        $timeout = $requestedTimeout > 0 ? min($requestedTimeout, self::MAX_TIMEOUT) : $server->timeout;
         $c = &$this->connections[$id];
         $c['phase'] = 'relay';
         $c['server'] = $name;
         $c['process'] = $process;
+        $c['pid'] = (int)proc_get_status($process)['pid'];
         $c['stdin'] = $pipes[0];
         $c['stdout'] = $pipes[1];
         $c['stderr'] = $pipes[2];
-        $c['toClient'] .= $this->json(['ok' => true]);
         $c['toChild'] = $rest;
-        $c['deadline'] = microtime(true) + $server->timeout + 5;
+        $c['deadline'] = microtime(true) + $timeout + 5;
+        unset($c);
+        $this->answer($id, ['ok' => true]);
         $this->log(sprintf('started "%s"', $name));
     }
 
@@ -416,49 +484,91 @@ final class Relay
                 $this->drop($id);
                 continue;
             }
-            if ($c['phase'] !== 'relay' || $c['stdoutEofAt'] === null) {
+            if ($c['phase'] !== 'relay') {
                 continue;
             }
-            // The server closed its stdout: report how it ended, then close once that line is sent.
-            $status = is_resource($c['process']) ? proc_get_status($c['process']) : ['running' => false, 'exitcode' => -1];
-            if ($status['running'] && $now - $c['stdoutEofAt'] < self::EXIT_GRACE) {
+            if ($c['exitedAt'] === null && is_resource($c['process'])) {
+                $status = proc_get_status($c['process']);
+                if (!$status['running']) {
+                    // proc_get_status() reports the real exit code only the first time.
+                    $this->connections[$id]['exitedAt'] = $now;
+                    $this->connections[$id]['exitCode'] = (int)$status['exitcode'];
+                    $c = $this->connections[$id];
+                }
+            }
+            $ended = ($c['stdoutEofAt'] !== null && ($c['exitedAt'] !== null || $now - $c['stdoutEofAt'] >= self::EXIT_GRACE))
+                || ($c['exitedAt'] !== null && $now - $c['exitedAt'] >= self::EXIT_GRACE);
+            if (!$ended) {
                 continue;
             }
+            // The server ended: report how, then close once that line is sent.
             if (is_resource($c['stderr'])) {
                 $tail = fread($c['stderr'], self::STDERR_CAP);
                 $c['stderrText'] = substr($c['stderrText'] . (string)$tail, 0, self::STDERR_CAP);
             }
-            $code = $status['running'] ? null : (int)$status['exitcode'];
-            $this->log(sprintf('"%s" ended (code %s): %s', $c['server'], $code === null ? '?' : (string)$code, trim($c['stderrText'])));
+            $this->log(sprintf('"%s" ended (code %s)', $c['server'], $c['exitCode'] === null ? '?' : (string)$c['exitCode']));
             $this->release($id);
-            $this->connections[$id]['stderrText'] = $c['stderrText'];
             $this->finish($id, [
                 'jsonrpc' => '2.0',
                 'method' => 'notifications/worker/exit',
-                'params' => ['code' => $code, 'stderr' => $c['stderrText']],
+                'params' => ['code' => $c['exitCode'], 'stderr' => $c['stderrText']],
             ]);
         }
     }
 
     /**
-     * Send one last line, then close.
+     * A signed answer: the client checks it came from this install's worker.
+     *
+     * @param array<string,mixed> $answer
+     */
+    private function answer(int $id, array $answer): void
+    {
+        $c = $this->connections[$id];
+        $this->connections[$id]['toClient'] .= $this->json(Handshake::signAnswer($c['key'], $c['nonce'], $c['clientNonce'], $answer));
+    }
+
+    /**
+     * Send one last answer, then close.
      *
      * @param array<string,mixed> $message
      */
     private function finish(int $id, array $message): void
     {
-        $this->connections[$id]['toClient'] .= $this->json($message);
+        if (isset($message['ok'])) {
+            $this->answer($id, $message);
+        } else {
+            $this->connections[$id]['toClient'] .= $this->json($message);
+        }
         $this->connections[$id]['phase'] = 'closing';
         $this->connections[$id]['deadline'] = microtime(true) + self::FLUSH_GRACE;
     }
 
     private function fail(int $id, string $error): void
     {
+        $c = $this->connections[$id];
+        if ($c['key'] === '') {
+            // Before authentication there is nothing to sign with.
+            $this->connections[$id]['toClient'] .= $this->json(['ok' => false, 'error' => $error]);
+            $this->connections[$id]['phase'] = 'closing';
+            $this->connections[$id]['deadline'] = microtime(true) + self::FLUSH_GRACE;
+
+            return;
+        }
         $this->finish($id, ['ok' => false, 'error' => $error]);
     }
 
+    private function beginStop(float $grace): void
+    {
+        $this->stopping = true;
+        $this->stopDeadline = microtime(true) + $grace;
+        if ($this->listener !== null) {
+            fclose($this->listener);
+            $this->listener = null;
+        }
+    }
+
     /**
-     * End the connection's server process, if any, and close its pipes.
+     * End the connection's server process and the processes it started, and close its pipes.
      */
     private function release(int $id): void
     {
@@ -469,6 +579,11 @@ final class Relay
             }
             $c[$pipe] = null;
         }
+        if ($this->setsid !== null && $c['pid'] !== null && $c['pid'] > 0) {
+            // The server leads its own process group; this ends what it started too.
+            $pid = $c['pid'];
+            $this->quietly(static fn () => posix_kill(-$pid, 9));
+        }
         if (is_resource($c['process'])) {
             if (proc_get_status($c['process'])['running']) {
                 proc_terminate($c['process'], 9);
@@ -476,6 +591,7 @@ final class Relay
             proc_close($c['process']);
         }
         $c['process'] = null;
+        $c['pid'] = null;
     }
 
     private function drop(int $id): void
@@ -501,7 +617,7 @@ final class Relay
         $now = microtime(true);
         foreach ($this->connections as $c) {
             $timeout = min($timeout, max(0.0, $c['deadline'] - $now));
-            if ($c['stdoutEofAt'] !== null) {
+            if ($c['stdoutEofAt'] !== null || $c['exitedAt'] !== null) {
                 $timeout = min($timeout, 0.05);
             }
         }
@@ -535,6 +651,10 @@ final class Relay
         }
     }
 
+    /**
+     * Only what the worker did. A server's stderr can echo credentials, so it is never logged here; it
+     * reaches the admin's session, which masks it.
+     */
     private function log(string $message): void
     {
         if ($this->log !== null) {

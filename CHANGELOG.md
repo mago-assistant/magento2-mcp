@@ -17,9 +17,14 @@
 - **Only the command line starts processes.** `bin/magento`, cron and the worker start a local server
   directly; every web request goes through the worker, also where web PHP could start processes. Local
   servers used from the admin need the worker, which cron starts within a minute.
-- **A started server inherits nothing.** PHP sets no close-on-exec, so a server started by the worker or by
-  cron would have inherited the worker's listening socket, client connections and cron's lock files; every
-  descriptor above stderr is now pointed at `/dev/null` in the child.
+- **A server the worker starts inherits nothing.** PHP sets no close-on-exec, so a server started by the
+  worker, or the worker started by cron, would have inherited the worker's listening socket, client
+  connections and cron's lock files; every descriptor above stderr is now pointed at `/dev/null` in the
+  child. (`bin/magento` commands that start a server directly still pass their own descriptors, as before.)
+- **Both sides of the worker connection prove themselves**, a changed or rotated crypt key needs no restart,
+  a worker of another build is replaced even after an in-place deploy, a worker that can no longer prove
+  itself is ended through its pid file, a server's whole process group ends with its call, the worker's log
+  never contains a server's stderr, and the worker runs with the usual `PATH` directories added to cron's.
 - **A server row's own timeout is kept** when its `php` command is resolved to the CLI binary; before, the
   resolved copy fell back to the default.
 

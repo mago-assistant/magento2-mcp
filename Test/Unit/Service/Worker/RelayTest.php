@@ -41,16 +41,17 @@ final class RelayTest extends TestCase
     /**
      * @param array<string,string> $env
      */
-    private function startRelay(array $env = [], int $max = 8, float $handshake = 5.0): void
+    private function startRelay(array $env = [], int $max = 8, float $handshake = 5.0, array $servers = [], string $cryptKey = self::CRYPT_KEY): void
     {
         $fake = dirname(__DIR__, 2) . '/Fakes/fake-mcp-server.php';
         $config = $this->dir . '/relay.json';
         file_put_contents($config, json_encode([
-            'key' => self::CRYPT_KEY,
+            'key' => $cryptKey,
             'root' => $this->dir,
             'max' => $max,
             'handshake' => $handshake,
-            'servers' => ['fake' => ['command' => [PHP_BINARY, $fake], 'env' => $env + ['FAKE_MCP_MARKER' => $this->dir . '/started'], 'timeout' => 20]],
+            'build' => 'build-1',
+            'servers' => $servers + ['fake' => ['command' => [PHP_BINARY, $fake], 'env' => $env + ['FAKE_MCP_MARKER' => $this->dir . '/started'], 'timeout' => 20]],
         ]));
         $pipes = [];
         $this->relay = proc_open([PHP_BINARY, dirname(__DIR__, 2) . '/Fakes/run-relay.php', $config], [1 => ['pipe', 'w'], 2 => ['file', $this->dir . '/relay.err', 'a']], $pipes);
@@ -66,7 +67,7 @@ final class RelayTest extends TestCase
         $socket = stream_socket_client('tcp://' . $this->address, $errno, $error, 5);
         self::assertIsResource($socket, $error);
         $hello = json_decode($this->readLine($socket), true);
-        self::assertSame(1, $hello['v']);
+        self::assertSame(2, $hello['v']);
 
         return [$socket, $hello['nonce']];
     }
@@ -75,13 +76,20 @@ final class RelayTest extends TestCase
      * @param resource $socket
      * @return array<string,mixed>
      */
-    private function ask($socket, string $nonce, string $op, string $server = '', ?string $auth = null): array
+    private function ask($socket, string $nonce, string $op, string $server = '', ?string $auth = null, int $timeout = 20, string $cryptKey = self::CRYPT_KEY): array
     {
-        $auth ??= Handshake::sign(Handshake::key(self::CRYPT_KEY), $nonce, $op, $server);
-        fwrite($socket, json_encode(['op' => $op, 'server' => $server, 'timeout' => 20, 'auth' => $auth]) . "\n");
+        $key = Handshake::key($cryptKey);
+        $clientNonce = Handshake::nonce();
+        $auth ??= Handshake::signRequest($key, $nonce, $clientNonce, $op, $server, $timeout);
+        fwrite($socket, json_encode(['op' => $op, 'server' => $server, 'timeout' => $timeout, 'cnonce' => $clientNonce, 'auth' => $auth]) . "\n");
+        $answer = json_decode($this->readLine($socket), true) ?? ['unreadable' => true];
+        $this->lastAnswerProven = Handshake::verifyAnswer($key, $nonce, $clientNonce, $answer);
+        unset($answer['proof']);
 
-        return json_decode($this->readLine($socket), true) ?? ['unreadable' => true];
+        return $answer;
     }
+
+    private bool $lastAnswerProven = false;
 
     /**
      * @param resource $socket
@@ -132,6 +140,7 @@ final class RelayTest extends TestCase
     {
         [$socket, $nonce] = $this->connect();
         self::assertSame(['ok' => true], $this->ask($socket, $nonce, 'open', 'fake'));
+        self::assertTrue($this->lastAnswerProven, 'the worker proved its answer');
 
         return $socket;
     }
@@ -205,7 +214,7 @@ final class RelayTest extends TestCase
         [, $oldNonce] = $this->connect();
         [$socket] = $this->connect();
 
-        $answer = $this->ask($socket, $oldNonce, 'open', 'fake', Handshake::sign(Handshake::key(self::CRYPT_KEY), $oldNonce, 'open', 'fake'));
+        $answer = $this->ask($socket, $oldNonce, 'open', 'fake', Handshake::signRequest(Handshake::key(self::CRYPT_KEY), $oldNonce, str_repeat('a', 32), 'open', 'fake', 20));
 
         self::assertFalse($answer['ok']);
         self::assertFileDoesNotExist($this->dir . '/started');
@@ -217,7 +226,7 @@ final class RelayTest extends TestCase
         $this->startRelay();
         [$socket, $nonce] = $this->connect();
 
-        $answer = $this->ask($socket, $nonce, 'open', 'fake', Handshake::sign(Handshake::key('another-install'), $nonce, 'open', 'fake'));
+        $answer = $this->ask($socket, $nonce, 'open', 'fake', cryptKey: 'another-install');
 
         self::assertFalse($answer['ok']);
     }
@@ -341,6 +350,8 @@ final class RelayTest extends TestCase
         self::assertIsResource($open);
 
         self::assertTrue($status['ok']);
+        self::assertTrue($this->lastAnswerProven);
+        self::assertSame('build-1', $status['build']);
         self::assertSame(realpath($this->dir), $status['root']);
         self::assertIsInt($status['pid']);
         self::assertSame(1, $status['connections']);
@@ -367,15 +378,122 @@ final class RelayTest extends TestCase
     }
 
     #[Test]
+    public function aRotatedCryptKeyIsAcceptedUnderTheNewKey(): void
+    {
+        $this->startRelay(cryptKey: self::CRYPT_KEY . "\nrotated-key");
+        [$socket, $nonce] = $this->connect();
+
+        $answer = $this->ask($socket, $nonce, 'open', 'fake', cryptKey: self::CRYPT_KEY . "\nrotated-key");
+
+        self::assertSame(['ok' => true], $answer);
+        self::assertTrue($this->lastAnswerProven);
+    }
+
+    #[Test]
+    public function aWrongKeyIsRefusedWithoutProof(): void
+    {
+        $this->startRelay();
+        [$socket, $nonce] = $this->connect();
+
+        $answer = $this->ask($socket, $nonce, 'status', cryptKey: 'another-install');
+
+        self::assertSame(['ok' => false, 'error' => 'not authorised'], $answer);
+        self::assertFalse($this->lastAnswerProven);
+    }
+
+    #[Test]
+    public function idleConnectionsCannotTakeTheSlotsOfRealCalls(): void
+    {
+        $this->startRelay(max: 2);
+        $idle = [];
+        for ($i = 0; $i < 6; $i++) {
+            $idle[] = $this->connect()[0];
+        }
+
+        $socket = $this->openFake();
+
+        self::assertSame('fake-mcp', $this->rpc($socket, 1, 'initialize')['result']['serverInfo']['name']);
+        self::assertCount(6, $idle);
+    }
+
+    #[Test]
+    public function theClientsTimeoutBoundsTheCall(): void
+    {
+        $this->startRelay(servers: ['silent' => ['command' => ['/bin/sh', '-c', 'exec sleep 49.' . random_int(100, 999)], 'timeout' => 30]]);
+        [$socket, $nonce] = $this->connect();
+        $started = microtime(true);
+        self::assertSame(['ok' => true], $this->ask($socket, $nonce, 'open', 'silent', timeout: 1));
+
+        self::assertSame('', $this->readLine($socket, 15.0));
+        self::assertLessThan(7.5, microtime(true) - $started, 'closed at the client\'s 1 s + 5 s, not the row\'s 30 s');
+    }
+
+    #[Test]
+    public function aServersOwnChildrenEndWithIt(): void
+    {
+        $marker = 'sleep 47.' . random_int(100, 999);
+        $this->startRelay(servers: ['forker' => ['command' => ['/bin/sh', '-c', $marker . ' & exec "$0" "$1"', PHP_BINARY, dirname(__DIR__, 2) . '/Fakes/fake-mcp-server.php'], 'timeout' => 20]]);
+        [$socket, $nonce] = $this->connect();
+        self::assertSame(['ok' => true], $this->ask($socket, $nonce, 'open', 'forker'));
+        $this->rpc($socket, 1, 'initialize');
+        $sleeper = $this->pidOf($marker);
+        self::assertNotNull($sleeper, 'the grandchild runs');
+
+        fclose($socket);
+
+        self::assertTrue($this->waitUntilGone($sleeper, 3.0), 'the grandchild ended with the call');
+    }
+
+    #[Test]
+    public function aClientThatLeavesIsNoticedWhileItsServerIsNotReading(): void
+    {
+        $marker = 'sleep 48.' . random_int(100, 999);
+        $this->startRelay(servers: ['deaf' => ['command' => ['/bin/sh', '-c', 'exec ' . $marker], 'timeout' => 20]]);
+        [$socket, $nonce] = $this->connect();
+        self::assertSame(['ok' => true], $this->ask($socket, $nonce, 'open', 'deaf'));
+        $sleeper = $this->pidOf($marker);
+        stream_set_blocking($socket, false);
+        $chunk = str_repeat('z', 65536);
+        $until = microtime(true) + 5;
+        $sent = 0;
+        while ($sent < 4 * 1048576 && microtime(true) < $until) {
+            set_error_handler(static fn (): bool => true);
+            $sent += (int)fwrite($socket, $chunk); // fails once the worker has ended the call, as it should
+            restore_error_handler();
+            usleep(1000);
+        }
+
+        fclose($socket);
+
+        self::assertTrue($this->waitUntilGone((int)$sleeper, 4.0), 'killed soon after the client left, not at the deadline');
+    }
+
+    private function pidOf(string $commandLine): ?int
+    {
+        $until = microtime(true) + 3;
+        while (microtime(true) < $until) {
+            foreach (glob('/proc/[0-9]*/cmdline') ?: [] as $file) {
+                if (str_replace("\0", ' ', trim(self::contents($file), "\0")) === $commandLine) {
+                    return (int)basename(dirname($file));
+                }
+            }
+            usleep(50000);
+        }
+
+        return null;
+    }
+
+    #[Test]
     public function refusesAConnectionOverTheLimit(): void
     {
         $this->startRelay(max: 2);
         $open = [$this->openFake(), $this->openFake()];
 
-        $socket = stream_socket_client('tcp://' . $this->address, $errno, $error, 5);
-        $answer = json_decode($this->readLine($socket), true);
+        [$socket, $nonce] = $this->connect();
+        $answer = $this->ask($socket, $nonce, 'open', 'fake');
 
         self::assertSame(['ok' => false, 'error' => 'busy'], $answer);
+        self::assertTrue($this->lastAnswerProven);
         self::assertCount(2, $open);
     }
 }
