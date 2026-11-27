@@ -24,13 +24,15 @@ class ChannelFactory
     public function __construct(
         private readonly Config $config,
         private readonly DeploymentConfig $deploymentConfig,
-        private readonly string $sapi = PHP_SAPI
+        private readonly ?string $sapi = null
     ) {
     }
 
     public function create(): ChannelInterface
     {
-        if (in_array($this->sapi, self::COMMAND_LINE_SAPIS, true)) {
+        // Read at run time: setup:di:compile runs on the command line and stores constructor defaults as
+        // values, so a default of PHP_SAPI would be "cli" for every web request of a compiled install.
+        if (in_array($this->sapi ?? PHP_SAPI, self::COMMAND_LINE_SAPIS, true)) {
             return new ProcessChannel();
         }
 
