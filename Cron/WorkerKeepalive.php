@@ -16,8 +16,8 @@ use MagoAssistant\Mcp\Service\Worker\Starter;
 use MagoAssistant\Mcp\Service\Worker\WorkerProcess;
 
 /**
- * Every minute: keep one MCP worker of this build running while the addon is on and a local server is
- * enabled, none otherwise. A worker of another release or build is replaced in the same run; one that
+ * Every minute: keep one MCP worker of this build, listening where the settings say, running while the addon
+ * is on and a local server is enabled, none otherwise. A worker of another release or build is replaced in the same run; one that
  * cannot prove itself any more (crypt key changed, older protocol) is ended through its pid file and the
  * next run starts the current one.
  */
@@ -52,7 +52,12 @@ class WorkerKeepalive
             return;
         }
         if ($status === null) {
-            $this->starter->start();
+            // Nothing answers where the settings say. A worker of this install that still runs listens
+            // elsewhere (the address settings changed) and holds the port a new one would bind: end it,
+            // and the next run starts one with the current settings.
+            if (!$this->process->kill()) {
+                $this->starter->start();
+            }
 
             return;
         }

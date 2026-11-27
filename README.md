@@ -302,8 +302,8 @@ the worker when the addon is on, at least one local server is enabled and none a
 worker of another release or build in the same run (a new release directory, or an in-place deploy that
 changed `pub/static/deployed_version.txt`, `app/etc/config.php`, the compiled DI or this addon), and stops
 the worker when no local server is enabled. A worker it can no longer talk to (the crypt key changed, or an
-older version of the protocol) is ended through `var/mago-mcp-worker.pid`, and the next run starts the
-current one. A shop without an enabled local server never runs a worker. To run it under supervisor or
+older version of the protocol) or that no longer listens where the settings say (the address settings
+changed while it ran) is ended through `var/mago-mcp-worker.pid`, and the next run starts the current one. A shop without an enabled local server never runs a worker. To run it under supervisor or
 systemd instead, set **Keep the MCP worker running** to No and run `bin/magento mago:mcp:serve` there.
 
 The worker, and every local server it starts, runs as the user cron runs as, with cron's environment plus

@@ -136,8 +136,22 @@ final class WorkerKeepaliveTest extends TestCase
     {
         $this->resolver->method('anyEnabled')->willReturn(true);
         $this->client->method('status')->willReturn(null);
+        $this->process->method('kill')->willReturn(false);
         $this->client->expects(self::never())->method('stop');
         $this->starter->expects(self::once())->method('start');
+
+        $this->keepalive()->execute();
+    }
+
+    #[Test]
+    public function aWorkerThatNoLongerListensWhereTheSettingsSayIsEnded(): void
+    {
+        // The worker address or listen setting changed while it ran: nothing answers at the configured
+        // address and a new worker cannot bind the port the old one holds.
+        $this->resolver->method('anyEnabled')->willReturn(true);
+        $this->client->method('status')->willReturn(null);
+        $this->process->expects(self::once())->method('kill')->willReturn(true);
+        $this->starter->expects(self::never())->method('start');
 
         $this->keepalive()->execute();
     }
